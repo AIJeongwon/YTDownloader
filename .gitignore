@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+
+# 실행 중 받거나 생성되는 파일입니다.
+bin/*.exe
+bin/yt-dlp
+bin/ffmpeg
+bin/ffprobe
+bin/deno
+cookies.txt
+*.part
+*.ytdl
+
+# 사용자 다운로드 결과입니다.
+downloads/

@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "build_python_version": "3.12.13",
+  "runtime_assets": [
+    {
+      "id": "yt-dlp",
+      "version": "2026.08.19",
+      "archive": {
+        "filename": "yt-dlp-2026.08.19.exe",
+        "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+        "size": 17840399,
+        "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"
+      },
+      "extract": {
+        "type": "file",
+        "destination": "bin/yt-dlp.exe",
+        "max_size": 30000000
+      }
+    },
+    {
+      "id": "ffmpeg",
+      "version": "N-126390-g9fc8c785e2",
+      "archive": {
+        "filename": "ffmpeg-N-126390-g9fc8c785e2-win64-gpl-shared.zip",
+        "url": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/autobuild-2026-09-02-17-51/ffmpeg-N-126390-g9fc8c785e2-win64-gpl-shared.zip",
+        "size": 76983772,
+        "sha256": "6d9bb137b273d1e9d9cd9f83471911a4261c22c472ec574a4b3f0679aa5641c0"
+      },
+      "extract": {
+        "type": "zip_flat_directory",
+        "source_directory": "bin",
+        "destination": "bin",
+        "allowed_suffixes": [".dll", ".exe"],
+        "allowed_executable_names": ["ffmpeg.exe", "ffprobe.exe"],
+        "required_files": ["ffmpeg.exe", "ffprobe.exe"],
+        "max_file_size": 250000000,
+        "max_total_size": 1000000000
+      }
+    },
+    {
+      "id": "deno",
+      "version": "2.6.0",
+      "archive": {
+        "filename": "deno-x86_64-pc-windows-msvc-2.6.0.zip",
+        "url": "https://github.com/denoland/deno/releases/download/v2.6.0/deno-x86_64-pc-windows-msvc.zip",
+        "size": 45434210,
+        "sha256": "940b4c7c8531687e6a621cce3c8e0efa530d08a639dadf70697bb2788f9c35b0"
+      },
+      "extract": {
+        "type": "zip_member",
+        "source_name": "deno.exe",
+        "destination": "bin/deno.exe",
+        "max_size": 150000000
+      }
+    }
+  ],
+  "notices": [
+    {
+      "filename": "yt-dlp-UNLICENSE.txt",
+      "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.08.19/LICENSE",
+      "size": 1211,
+      "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+    },
+    {
+      "filename": "yt-dlp-THIRD-PARTY.txt",
+      "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.08.19/THIRD_PARTY_LICENSES.txt",
+      "size": 243550,
+      "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
+    },
+    {
+      "filename": "FFmpeg-GPL-3.0.txt",
+      "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/9fc8c785e2747c87121ec28f8f10ceab0562384b/COPYING.GPLv3",
+      "size": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "filename": "Deno-MIT.txt",
+      "url": "https://raw.githubusercontent.com/denoland/deno/v2.6.0/LICENSE.md",
+      "size": 1074,
+      "sha256": "ee79dd206fb5aa60a7485104ea78ba2a78935d6586cbb83c616db2579543f756"
+    },
+    {
+      "filename": "PySide6-Apache-2.0.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/Apache-2.0.txt",
+      "size": 10398,
+      "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb"
+    },
+    {
+      "filename": "PySide6-BSD-3-Clause.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/BSD-3-Clause.txt",
+      "size": 1478,
+      "sha256": "62803a6fcceef9091a129d7293d2469ea332b35d30f5e1bc4c628a9f35f3d29c"
+    },
+    {
+      "filename": "PySide6-GFDL-1.3.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "size": 22955,
+      "sha256": "110535522396708cea37c72a802c5e7e81391139f5f7985631c93ef242b206a4"
+    },
+    {
+      "filename": "PySide6-GPL-2.0.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/GPL-2.0-only.txt",
+      "size": 18092,
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "filename": "PySide6-GPL-3.0.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/GPL-3.0-only.txt",
+      "size": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "filename": "PySide6-LGPL-3.0.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/LGPL-3.0-only.txt",
+      "size": 7651,
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
+      "filename": "PySide6-Qt-GPL-exception.txt",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.2/LICENSES/Qt-GPL-exception-1.0.txt",
+      "size": 965,
+      "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2"
+    },
+    {
+      "filename": "PyInstaller-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/pyinstaller/pyinstaller/v6.22.2/COPYING.txt",
+      "size": 32138,
+      "sha256": "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245"
+    },
+    {
+      "filename": "Python-3.12.13-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.12.13/LICENSE",
+      "size": 13936,
+      "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+      "python_version": "3.12.13"
+    }
+  ],
+  "generated_source_assets": [
+    {
+      "id": "ffmpeg-dependencies-source",
+      "title": "FFmpeg GPL 공유 빌드에 포함된 의존 라이브러리 대응 소스",
+      "filename": "ffmpeg-dependencies-ea2ec3c0-source.tar"
+    }
+  ],
+  "source_assets": [
+    {
+      "id": "yt-dlp-source",
+      "title": "yt-dlp 2026.08.19 소스",
+      "filename": "yt-dlp-2026.08.19-source.tar.gz",
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.tar.gz",
+      "size": 6020567,
+      "sha256": "072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1"
+    },
+    {
+      "id": "ffmpeg-source",
+      "title": "FFmpeg 9fc8c785e2 대응 소스",
+      "filename": "ffmpeg-9fc8c785e2-source.tar.gz",
+      "url": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/9fc8c785e2747c87121ec28f8f10ceab0562384b",
+      "size": 17612137,
+      "sha256": "1f5e585b5b0a8cc3b167f85a464878e50bc3e044832d052bc7cd62e4e3af3506"
+    },
+    {
+      "id": "ffmpeg-builds-source",
+      "title": "yt-dlp FFmpeg-Builds 빌드 스크립트",
+      "filename": "ffmpeg-builds-ea2ec3c0-source.tar.gz",
+      "url": "https://codeload.github.com/yt-dlp/FFmpeg-Builds/tar.gz/ea2ec3c0e0dfb11069729b7df5cb234bb2145956",
+      "size": 104792,
+      "sha256": "9bd52c7ae53c2e9cccc870a23d8e67146bcc966d8b6d1ac45adcb36e24bf92ce"
+    },
+    {
+      "id": "pyside6-source",
+      "title": "PySide6 6.11.2 소스",
+      "filename": "pyside-setup-everywhere-src-6.11.2.tar.xz",
+      "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/pyside-setup-everywhere-src-6.11.2.tar.xz",
+      "size": 18053248,
+      "sha256": "cba47efbaad1bedd529725cbc14e21f156c7a19366f07b3edfbb076ffd7afdf8"
+    },
+    {
+      "id": "qtbase-source",
+      "title": "Qt Base 6.11.2 소스",
+      "filename": "qtbase-everywhere-src-6.11.2.tar.xz",
+      "url": "https://download.qt.io/official_releases/qt/6.11/6.11.2/submodules/qtbase-everywhere-src-6.11.2.tar.xz",
+      "size": 50582668,
+      "sha256": "5b2e00eccaf5a4d8c14134ffa0ea8dfd0a35ae1ffc7f8d87fa4305a1ed23cf22"
+    },
+    {
+      "id": "deno-source",
+      "title": "Deno 2.6.0 소스",
+      "filename": "deno-2.6.0-source.tar.gz",
+      "url": "https://codeload.github.com/denoland/deno/tar.gz/refs/tags/v2.6.0",
+      "size": 25556340,
+      "sha256": "e36a011376eda5cd2a2cc2427384622a95b4838b10241ae5d9624a5cc0a992f4"
+    },
+    {
+      "id": "python-source-3.12.13",
+      "title": "Python 3.12.13 소스",
+      "filename": "Python-3.12.13.tar.xz",
+      "url": "https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz",
+      "size": 20801708,
+      "sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684",
+      "python_version": "3.12.13"
+    }
+  ]
+}
