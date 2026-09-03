@@ -67,13 +67,24 @@ class CommandTests(unittest.TestCase):
             end_seconds=70,
             file_stem="핵심 장면",
         )
-        arguments = build_download_arguments(request, self.tools)
+        temp_directory = Path("C:/downloads/.ytdownloader-segment-test")
+        arguments = build_download_arguments(
+            request,
+            self.tools,
+            temp_directory=temp_directory,
+        )
         self.assertIn("--extract-audio", arguments)
         self.assertNotIn("--remux-video", arguments)
         section_index = arguments.index("--download-sections")
         self.assertEqual(arguments[section_index + 1], "*5.25-70")
         output_index = arguments.index("--output")
         self.assertEqual(arguments[output_index + 1], "핵심 장면.%(ext)s")
+        path_values = [
+            arguments[index + 1]
+            for index, value in enumerate(arguments)
+            if value == "--paths"
+        ]
+        self.assertIn(f"temp:{temp_directory}", path_values)
 
     def test_progress_line_is_parsed_and_clamped(self) -> None:
         self.assertEqual(

@@ -83,6 +83,12 @@ from .job_files import (
 )
 from .models import DownloadRequest, MediaKind
 from .process_control import terminate_process_tree
+from .temp_files import (
+    SegmentTempDirectory,
+    SegmentTempError,
+    create_segment_temp_directory,
+    remove_segment_temp_directory,
+)
 from .tools import ToolError, ToolPaths, discover_tools
 from .updater import UpdateResult, YtDlpUpdater
 from .validation import (
@@ -303,6 +309,7 @@ class MainWindow(QMainWindow):
         self._pending_requests: list[DownloadRequest] = []
         self._active_tools: ToolPaths | None = None
         self._active_request: DownloadRequest | None = None
+        self._active_segment_temp: SegmentTempDirectory | None = None
         self._ffmpeg_progress_fields: dict[str, str] = {}
         self._ffmpeg_progress_estimator = FFmpegProgressEstimator()
         self._current_job_number = 0
@@ -1306,7 +1313,29 @@ class MainWindow(QMainWindow):
         request = self._pending_requests.pop(0)
         self._active_request = request
         self._current_job_number += 1
-        arguments = build_download_arguments(request, self._active_tools)
+        self._active_segment_temp = None
+        if request.start_seconds is not None and request.end_seconds is not None:
+            try:
+                self._active_segment_temp = create_segment_temp_directory(
+                    request.output_directory
+                )
+            except SegmentTempError as error:
+                self._pending_requests.clear()
+                self._active_tools = None
+                self._active_request = None
+                self.status_label.setText("구간 임시 폴더를 만들지 못했습니다.")
+                self._append_log(str(error))
+                self._set_running(False)
+                return
+        arguments = build_download_arguments(
+            request,
+            self._active_tools,
+            temp_directory=(
+                self._active_segment_temp.path
+                if self._active_segment_temp is not None
+                else None
+            ),
+        )
         self._stdout_buffer = ""
         self._stderr_buffer = ""
         self._ffmpeg_progress_fields.clear()
@@ -1445,6 +1474,13 @@ class MainWindow(QMainWindow):
         self._ffmpeg_progress_fields.clear()
         if process is not None:
             process.deleteLater()
+        completed_successfully = (
+            exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0
+        )
+        if self._cancel_requested or completed_successfully:
+            self._cleanup_active_segment_temp()
+        else:
+            self._preserve_active_segment_temp()
         if self.progress.maximum() == 0:
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
@@ -1454,7 +1490,7 @@ class MainWindow(QMainWindow):
             self._active_tools = None
             self.status_label.setText("다운로드를 취소했습니다.")
             self._append_log("사용자가 작업을 취소했습니다.")
-        elif exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
+        elif completed_successfully:
             if self._pending_requests:
                 self._start_next_request()
                 return
@@ -1489,6 +1525,7 @@ class MainWindow(QMainWindow):
             self._active_tools = None
             self._active_request = None
             self._ffmpeg_progress_fields.clear()
+            self._cleanup_active_segment_temp()
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
             if process is not None:
@@ -1535,6 +1572,24 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             return
 
+    def _cleanup_active_segment_temp(self) -> None:
+        """현재 구간 작업에 할당한 것으로 검증된 임시 폴더만 정리합니다."""
+        temporary = self._active_segment_temp
+        self._active_segment_temp = None
+        if temporary is None:
+            return
+        try:
+            remove_segment_temp_directory(temporary)
+        except SegmentTempError as error:
+            self._append_log(f"{error} 남은 위치: {temporary.path}")
+
+    def _preserve_active_segment_temp(self) -> None:
+        """실패한 구간 작업의 임시 파일은 자동 삭제하지 않고 위치를 알립니다."""
+        temporary = self._active_segment_temp
+        self._active_segment_temp = None
+        if temporary is not None:
+            self._append_log(f"실패한 구간의 임시 파일을 보존했습니다: {temporary.path}")
+
     def _set_running(self, running: bool) -> None:
         self.download_button.setEnabled(self._tools_ready and not running)
         self.cancel_button.setEnabled(running)
@@ -1570,6 +1625,8 @@ class MainWindow(QMainWindow):
             if not process.waitForFinished(3000):
                 process.kill()
                 process.waitForFinished(1000)
+            if process.state() == QProcess.ProcessState.NotRunning:
+                self._cleanup_active_segment_temp()
         if (
             self._video_info_process is not None
             and self._video_info_process.state() != QProcess.ProcessState.NotRunning

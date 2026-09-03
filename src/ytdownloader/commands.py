@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 import math
+from pathlib import Path
 import re
 import time
 
@@ -109,7 +110,12 @@ class FFmpegProgressEstimator:
         return speed if math.isfinite(speed) and speed > 0 else None
 
 
-def build_download_arguments(request: DownloadRequest, tools: ToolPaths) -> list[str]:
+def build_download_arguments(
+    request: DownloadRequest,
+    tools: ToolPaths,
+    *,
+    temp_directory: Path | None = None,
+) -> list[str]:
     """셸 해석이 필요 없는 고정된 다운로드 인자를 반환합니다."""
     arguments = [
         "--ignore-config",
@@ -151,6 +157,9 @@ def build_download_arguments(request: DownloadRequest, tools: ToolPaths) -> list
         "--print",
         f"after_move:{DONE_PREFIX}%(filepath)s",
     ]
+
+    if temp_directory is not None:
+        arguments.extend(("--paths", f"temp:{temp_directory}"))
 
     if tools.deno is not None:
         arguments.extend(("--js-runtimes", f"deno:{tools.deno}"))

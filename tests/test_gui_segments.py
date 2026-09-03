@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QAbstractItemView, QApplication, QMessageBox
 from ytdownloader.gui import MainWindow, _initial_window_size
 from ytdownloader.job_files import create_job_document, save_job_file
 from ytdownloader.models import DownloadRequest, MediaKind
+from ytdownloader.temp_files import create_segment_temp_directory
 from ytdownloader.validation import ValidationError
 from ytdownloader.video_info import VideoInfo
 
@@ -362,6 +363,95 @@ class GuiSegmentTests(unittest.TestCase):
         self.assertEqual(window.status_label.text(), "다운로드를 취소했습니다.")
         self.assertEqual(window.progress.maximum(), 100)
         window.close()
+
+    def test_cancelled_segment_removes_only_its_owned_temp_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            unrelated_part = output / "전체 영상.mp4.part"
+            unrelated_part.write_bytes(b"keep")
+            temporary = create_segment_temp_directory(output)
+            (temporary.path / "취소할 구간.mp4.part").write_bytes(b"partial")
+            window = MainWindow()
+            process = Mock()
+            process.readAllStandardOutput.return_value = b""
+            process.readAllStandardError.return_value = b""
+            window._process = process
+            window._active_segment_temp = temporary
+            window._cancel_requested = True
+            window._active_tools = Mock()
+            window._current_job_number = 1
+            window._total_jobs = 1
+
+            window._download_finished(1, QProcess.ExitStatus.NormalExit)
+
+            self.assertFalse(temporary.path.exists())
+            self.assertEqual(unrelated_part.read_bytes(), b"keep")
+            window.close()
+
+    def test_cancelled_full_download_keeps_existing_part_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            part_file = Path(directory) / "전체 영상.mp4.part"
+            part_file.write_bytes(b"resume")
+            window = MainWindow()
+            process = Mock()
+            process.readAllStandardOutput.return_value = b""
+            process.readAllStandardError.return_value = b""
+            window._process = process
+            window._active_segment_temp = None
+            window._cancel_requested = True
+            window._active_tools = Mock()
+            window._current_job_number = 1
+            window._total_jobs = 1
+
+            window._download_finished(1, QProcess.ExitStatus.NormalExit)
+
+            self.assertEqual(part_file.read_bytes(), b"resume")
+            window.close()
+
+    def test_failed_segment_preserves_temp_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = create_segment_temp_directory(Path(directory))
+            partial_file = temporary.path / "실패한 구간.mp4.part"
+            partial_file.write_bytes(b"partial")
+            window = MainWindow()
+            process = Mock()
+            process.readAllStandardOutput.return_value = b""
+            process.readAllStandardError.return_value = b""
+            window._process = process
+            window._active_segment_temp = temporary
+            window._cancel_requested = False
+            window._active_tools = Mock()
+            window._current_job_number = 1
+            window._total_jobs = 1
+
+            window._download_finished(1, QProcess.ExitStatus.NormalExit)
+
+            self.assertEqual(partial_file.read_bytes(), b"partial")
+            self.assertIn(str(temporary.path), window.log.toPlainText())
+            window.close()
+
+    def test_closing_window_cleans_segment_temp_only_after_process_stops(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = create_segment_temp_directory(Path(directory))
+            (temporary.path / "닫는 구간.mp4.part").write_bytes(b"partial")
+            window = MainWindow()
+            process = Mock()
+            process.state.side_effect = (
+                QProcess.ProcessState.Running,
+                QProcess.ProcessState.NotRunning,
+            )
+            process.waitForFinished.return_value = True
+            window._process = process
+            window._active_segment_temp = temporary
+            close_event = Mock()
+
+            with patch.object(window, "_stop_download_process", return_value=True):
+                window.closeEvent(close_event)
+
+            self.assertFalse(temporary.path.exists())
+            close_event.accept.assert_called_once_with()
+            window._process = None
+            window.close()
 
     def test_crashed_process_is_not_reported_as_success_with_zero_exit_code(self) -> None:
         window = MainWindow()
