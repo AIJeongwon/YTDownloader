@@ -64,7 +64,15 @@ from PySide6.QtWidgets import (
 
 from . import __version__
 from .app_updates import AppRelease, AppUpdateCheckResult, check_for_app_update
-from .commands import DONE_PREFIX, build_download_arguments, parse_progress_line
+from .commands import (
+    DONE_PREFIX,
+    FFmpegProgressEstimator,
+    build_ffmpeg_progress,
+    build_download_arguments,
+    parse_ffmpeg_progress_field,
+    parse_postprocess_line,
+    parse_progress_line,
+)
 from .job_files import (
     JOB_FILE_EXTENSION,
     JobDocument,
@@ -294,6 +302,9 @@ class MainWindow(QMainWindow):
         self._cancel_requested = False
         self._pending_requests: list[DownloadRequest] = []
         self._active_tools: ToolPaths | None = None
+        self._active_request: DownloadRequest | None = None
+        self._ffmpeg_progress_fields: dict[str, str] = {}
+        self._ffmpeg_progress_estimator = FFmpegProgressEstimator()
         self._current_job_number = 0
         self._total_jobs = 0
         self._update_thread: QThread | None = None
@@ -522,7 +533,8 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.progress.setTextVisible(False)
+        self.progress.setFormat("%p%")
+        self.progress.setTextVisible(True)
         status_layout.addWidget(self.progress)
         self.log = QPlainTextEdit()
         self.log.setAcceptDrops(False)
@@ -616,7 +628,10 @@ class MainWindow(QMainWindow):
                 background: #101827; color: #e5e7eb; border: 1px solid #475569;
                 padding: 8px;
             }
-            QProgressBar { background: #101827; border: none; border-radius: 5px; height: 10px; }
+            QProgressBar {
+                background: #101827; color: #f8fafc; border: none; border-radius: 8px;
+                height: 18px; text-align: center; font-weight: 700;
+            }
             QProgressBar::chunk { background: #3b82f6; border-radius: 5px; }
             QScrollBar:vertical {
                 background: #101827; width: 9px; margin: 3px 1px;
@@ -1289,17 +1304,22 @@ class MainWindow(QMainWindow):
         if not self._pending_requests or self._active_tools is None:
             return
         request = self._pending_requests.pop(0)
+        self._active_request = request
         self._current_job_number += 1
         arguments = build_download_arguments(request, self._active_tools)
         self._stdout_buffer = ""
         self._stderr_buffer = ""
-        self.progress.setValue(0)
-        self.progress_detail.clear()
+        self._ffmpeg_progress_fields.clear()
+        self._ffmpeg_progress_estimator.reset()
+        self.progress.setRange(0, 0)
+        self.progress_detail.setText("진행 정보를 기다리는 중…")
 
         if request.file_stem is None:
-            self.status_label.setText("전체 영상을 다운로드합니다…")
+            self.status_label.setText("전체 영상 다운로드를 준비합니다…")
         else:
-            self.status_label.setText(f"구간 {self._current_job_number}/{self._total_jobs} · {request.file_stem}")
+            self.status_label.setText(
+                f"구간 {self._current_job_number}/{self._total_jobs} 준비 중 · {request.file_stem}"
+            )
             self._append_log(f"구간 {self._current_job_number}/{self._total_jobs} 시작: {request.file_stem}")
 
         process = QProcess(self)
@@ -1342,16 +1362,74 @@ class MainWindow(QMainWindow):
             progress = parse_progress_line(line)
             if progress is not None:
                 percent, details = progress
-                self.progress.setValue(percent)
-                prefix = f"{self._current_job_number}/{self._total_jobs} · " if self._total_jobs > 1 else ""
-                self.progress_detail.setText(prefix + details)
-                if self._total_jobs == 1:
-                    self.status_label.setText("다운로드 중입니다…")
-            elif line.startswith(DONE_PREFIX):
+                self._show_download_progress(percent, details)
+                continue
+            ffmpeg_field = parse_ffmpeg_progress_field(line)
+            if ffmpeg_field is not None:
+                key, value = ffmpeg_field
+                if key in {"out_time", "speed"}:
+                    self._ffmpeg_progress_fields[key] = value
+                if key == "progress":
+                    estimated_speed = self._ffmpeg_progress_estimator.update(
+                        self._ffmpeg_progress_fields
+                    )
+                    ffmpeg_progress = build_ffmpeg_progress(
+                        self._ffmpeg_progress_fields,
+                        self._active_download_duration(),
+                        estimated_speed=estimated_speed,
+                    )
+                    self._ffmpeg_progress_fields.clear()
+                    if ffmpeg_progress is not None:
+                        percent, details = ffmpeg_progress
+                        self._show_download_progress(percent, details)
+                continue
+            postprocess = parse_postprocess_line(line)
+            if postprocess is not None:
+                self._show_postprocess_progress(*postprocess)
+                continue
+            if line.startswith(DONE_PREFIX):
                 self._append_log(f"저장 완료: {line[len(DONE_PREFIX):]}")
             elif is_error or line.startswith("["):
                 self._append_log(line)
         return remainder
+
+    def _active_download_duration(self) -> float | None:
+        """현재 전체 영상 또는 구간에서 진행률 기준으로 사용할 길이를 반환합니다."""
+        request = self._active_request
+        if (
+            request is not None
+            and request.start_seconds is not None
+            and request.end_seconds is not None
+        ):
+            return request.end_seconds - request.start_seconds
+        if self._video_info is not None:
+            return self._video_info.duration_seconds
+        return None
+
+    def _show_download_progress(self, percent: int, details: str) -> None:
+        """현재 영상 또는 구간의 진행률을 막대와 텍스트에 함께 표시합니다."""
+        self.progress.setRange(0, 100)
+        self.progress.setValue(percent)
+        prefix = f"{self._current_job_number}/{self._total_jobs} · " if self._total_jobs > 1 else ""
+        self.progress_detail.setText(prefix + details)
+        request = self._active_request
+        if request is not None and request.file_stem is not None:
+            self.status_label.setText(
+                f"구간 {self._current_job_number}/{self._total_jobs} · {percent}% · {request.file_stem}"
+            )
+        else:
+            self.status_label.setText(f"전체 영상 다운로드 중 · {percent}%")
+
+    def _show_postprocess_progress(self, status: str, processor: str) -> None:
+        """병합·변환 중에는 움직이는 막대로 프로세스가 실행 중임을 표시합니다."""
+        if status in {"started", "processing"}:
+            self.progress.setRange(0, 0)
+            self.status_label.setText("다운로드 후처리 중입니다…")
+            self.progress_detail.setText(f"{processor} 작업 중")
+            return
+        self.progress.setRange(0, 100)
+        self.progress.setValue(100)
+        self.progress_detail.setText(f"{processor} 완료")
 
     @Slot(int, QProcess.ExitStatus)
     def _download_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
@@ -1363,8 +1441,13 @@ class MainWindow(QMainWindow):
             self._consume_lines(self._stderr_buffer + "\n", is_error=True)
         process = self._process
         self._process = None
+        self._active_request = None
+        self._ffmpeg_progress_fields.clear()
         if process is not None:
             process.deleteLater()
+        if self.progress.maximum() == 0:
+            self.progress.setRange(0, 100)
+            self.progress.setValue(0)
 
         if self._cancel_requested:
             self._pending_requests.clear()
@@ -1376,6 +1459,7 @@ class MainWindow(QMainWindow):
                 self._start_next_request()
                 return
             self._active_tools = None
+            self.progress.setRange(0, 100)
             self.progress.setValue(100)
             self.progress_detail.setText(f"{self._total_jobs}/{self._total_jobs} · 100%" if self._total_jobs > 1 else "100%")
             if self._total_jobs > 1:
@@ -1385,6 +1469,8 @@ class MainWindow(QMainWindow):
         else:
             self._pending_requests.clear()
             self._active_tools = None
+            self._active_request = None
+            self._ffmpeg_progress_fields.clear()
             self.status_label.setText("다운로드에 실패했습니다.")
             if exit_status == QProcess.ExitStatus.CrashExit:
                 self._append_log(f"{self._current_job_number}번째 작업의 프로세스가 비정상 종료되었습니다.")
@@ -1401,6 +1487,10 @@ class MainWindow(QMainWindow):
             self._process = None
             self._pending_requests.clear()
             self._active_tools = None
+            self._active_request = None
+            self._ffmpeg_progress_fields.clear()
+            self.progress.setRange(0, 100)
+            self.progress.setValue(0)
             if process is not None:
                 process.deleteLater()
             self._set_running(False)

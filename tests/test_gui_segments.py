@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QAbstractItemView, QApplication, QMessageBox
 
 from ytdownloader.gui import MainWindow, _initial_window_size
 from ytdownloader.job_files import create_job_document, save_job_file
+from ytdownloader.models import DownloadRequest, MediaKind
 from ytdownloader.validation import ValidationError
 from ytdownloader.video_info import VideoInfo
 
@@ -206,6 +207,85 @@ class GuiSegmentTests(unittest.TestCase):
             self.assertIsNone(window._process)
             window.close()
 
+    def test_ffmpeg_section_output_updates_visible_progress(self) -> None:
+        window = MainWindow()
+        window._active_request = DownloadRequest(
+            url="https://youtu.be/abcdefghijk",
+            output_directory=Path("C:/downloads"),
+            media_kind=MediaKind.VIDEO,
+            max_height=480,
+            start_seconds=10,
+            end_seconds=20,
+            file_stem="핵심 장면",
+        )
+        window._current_job_number = 1
+        window._total_jobs = 2
+
+        remainder = window._consume_lines(
+            (
+                "frame=120\n"
+                "total_size=524288\n"
+                "out_time=00:00:05.000000\n"
+                "speed=1.25x\n"
+                "progress=continue\n"
+            ),
+            is_error=True,
+        )
+
+        self.assertEqual(remainder, "")
+        self.assertEqual(window.progress.minimum(), 0)
+        self.assertEqual(window.progress.maximum(), 100)
+        self.assertEqual(window.progress.value(), 50)
+        self.assertIn("50%", window.status_label.text())
+        self.assertIn("00:00:05 / 00:00:10", window.progress_detail.text())
+        self.assertIn("약 4초 남음", window.progress_detail.text())
+        self.assertEqual(window.log.toPlainText(), "")
+        window.close()
+
+    def test_ffmpeg_section_estimates_remaining_time_from_first_slice(self) -> None:
+        window = MainWindow()
+        window._active_request = DownloadRequest(
+            url="https://youtu.be/abcdefghijk",
+            output_directory=Path("C:/downloads"),
+            media_kind=MediaKind.VIDEO,
+            max_height=480,
+            start_seconds=10,
+            end_seconds=20,
+            file_stem="핵심 장면",
+        )
+        window._current_job_number = 1
+        window._total_jobs = 1
+        window._ffmpeg_progress_estimator.reset()
+
+        with patch("ytdownloader.commands.time.monotonic", side_effect=(100.0, 101.0)):
+            window._consume_lines(
+                (
+                    "out_time=N/A\n"
+                    "speed=N/A\n"
+                    "progress=continue\n"
+                    "out_time=00:00:02.000000\n"
+                    "speed=N/A\n"
+                    "progress=continue\n"
+                ),
+                is_error=True,
+            )
+
+        self.assertEqual(window.progress.value(), 20)
+        self.assertIn("약 4초 남음", window.progress_detail.text())
+        window.close()
+
+    def test_postprocess_output_shows_indeterminate_activity(self) -> None:
+        window = MainWindow()
+        window._consume_lines(
+            "__YTDLP_POSTPROCESS__:started|FFmpegMerger\n",
+            is_error=False,
+        )
+        self.assertEqual(window.progress.minimum(), 0)
+        self.assertEqual(window.progress.maximum(), 0)
+        self.assertEqual(window.status_label.text(), "다운로드 후처리 중입니다…")
+        self.assertEqual(window.progress_detail.text(), "FFmpegMerger 작업 중")
+        window.close()
+
     def test_initial_size_is_limited_to_the_available_screen(self) -> None:
         self.assertEqual(_initial_window_size(QSize(1920, 1080)), QSize(880, 980))
         self.assertEqual(_initial_window_size(QSize(800, 720)), QSize(760, 656))
@@ -270,6 +350,7 @@ class GuiSegmentTests(unittest.TestCase):
         window._active_tools = Mock()
         window._current_job_number = 1
         window._total_jobs = 2
+        window.progress.setRange(0, 0)
 
         window._cancel_download()
 
@@ -279,6 +360,7 @@ class GuiSegmentTests(unittest.TestCase):
             window._download_finished(0, QProcess.ExitStatus.NormalExit)
         start_next.assert_not_called()
         self.assertEqual(window.status_label.text(), "다운로드를 취소했습니다.")
+        self.assertEqual(window.progress.maximum(), 100)
         window.close()
 
     def test_crashed_process_is_not_reported_as_success_with_zero_exit_code(self) -> None:
