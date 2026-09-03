@@ -32,7 +32,7 @@ PowerShell에서 다음 명령을 실행합니다.
 
 ## GitHub Release
 
-`pyproject.toml`의 버전이 `0.1.4`이면 `v0.1.4` 태그를 푸시합니다. `.github/workflows/release.yml`은 태그와 앱 버전이 같은지 확인한 뒤 Windows 설치 파일과 일반 대응 소스 아카이브를 같은 GitHub Release에 게시합니다. 용량이 큰 FFmpeg 의존 라이브러리 대응 소스는 같은 FFmpeg 빌드를 사용하는 동안 검증된 기존 릴리스 자산을 재사용합니다. 릴리스 작업은 다음 검사를 자동으로 수행합니다.
+`pyproject.toml`의 버전이 `0.2.0`이면 `v0.2.0` 태그를 푸시합니다. `.github/workflows/release.yml`은 태그와 앱 버전이 같은지 확인한 뒤 Windows 설치 파일과 일반 대응 소스 아카이브를 같은 GitHub Release에 게시합니다. 용량이 큰 FFmpeg 의존 라이브러리 대응 소스는 같은 FFmpeg 빌드를 사용하는 동안 검증된 기존 릴리스 자산을 재사용합니다. 릴리스 작업은 다음 검사를 자동으로 수행합니다.
 
 - 단위 테스트와 패키징된 앱 시작 검사
 - 설치 프로그램의 무인 설치·실행·제거 검사
@@ -41,8 +41,8 @@ PowerShell에서 다음 명령을 실행합니다.
 - 설치 파일과 새로 첨부하는 대응 소스에 대한 GitHub 빌드 출처 증명 생성
 
 ```powershell
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 README의 다운로드 버튼은 다음 고정 주소를 사용합니다.
