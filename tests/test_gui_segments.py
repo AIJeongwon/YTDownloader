@@ -159,8 +159,11 @@ class GuiSegmentTests(unittest.TestCase):
 
     def test_default_size_shows_the_download_button_without_outer_scrolling(self) -> None:
         window = MainWindow()
-        window.resize(880, 980)
         window.show()
+        self.application.processEvents()
+        window.resize(
+            _initial_window_size(QSize(1920, 1200), window.page.minimumSizeHint())
+        )
         self.application.processEvents()
         button_bottom = window.download_button.mapTo(
             window.root_scroll.viewport(),
@@ -207,6 +210,14 @@ class GuiSegmentTests(unittest.TestCase):
         self.assertEqual(_initial_window_size(QSize(1920, 1080)), QSize(880, 980))
         self.assertEqual(_initial_window_size(QSize(800, 720)), QSize(760, 656))
         self.assertEqual(_initial_window_size(QSize(700, 600)), QSize(760, 640))
+        self.assertEqual(
+            _initial_window_size(QSize(1920, 1200), QSize(788, 1010)),
+            QSize(880, 1010),
+        )
+        self.assertEqual(
+            _initial_window_size(QSize(1920, 1000), QSize(788, 1010)),
+            QSize(880, 936),
+        )
 
     def test_wheel_at_segment_table_boundary_scrolls_the_outer_page(self) -> None:
         window = MainWindow()

@@ -113,16 +113,24 @@ _SEGMENT_HELP = """구간을 추가하면 각 행을 서로 다른 파일로 저
 저장한 파일은 ‘작업 불러오기’를 누르거나 이 창으로 끌어다 놓아 불러올 수 있습니다."""
 
 
-def _initial_window_size(available_size: QSize | None) -> QSize:
-    """화면 여백과 최소 크기를 지키는 최초 창 크기를 반환합니다."""
+def _initial_window_size(
+    available_size: QSize | None,
+    content_minimum: QSize | None = None,
+) -> QSize:
+    """실제 내용 크기와 화면 여백을 반영한 최초 창 크기를 반환합니다."""
+    desired_width = _PREFERRED_WINDOW_SIZE.width()
+    desired_height = _PREFERRED_WINDOW_SIZE.height()
+    if content_minimum is not None and content_minimum.isValid():
+        desired_width = max(desired_width, content_minimum.width())
+        desired_height = max(desired_height, content_minimum.height())
     if available_size is None or not available_size.isValid():
-        return QSize(_PREFERRED_WINDOW_SIZE)
+        return QSize(desired_width, desired_height)
     width = min(
-        _PREFERRED_WINDOW_SIZE.width(),
+        desired_width,
         max(_MINIMUM_WINDOW_SIZE.width(), available_size.width() - _INITIAL_SCREEN_MARGIN),
     )
     height = min(
-        _PREFERRED_WINDOW_SIZE.height(),
+        desired_height,
         max(_MINIMUM_WINDOW_SIZE.height(), available_size.height() - _INITIAL_SCREEN_MARGIN),
     )
     return QSize(width, height)
@@ -314,6 +322,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_style()
         self._adjust_segment_table_height()
+        QTimer.singleShot(0, self._fit_initial_window_to_content)
         QTimer.singleShot(0, self._start_update)
 
     def _build_ui(self) -> None:
@@ -631,6 +640,16 @@ class MainWindow(QMainWindow):
             return saved
         downloads = Path.home() / "Downloads"
         return str(downloads if downloads.is_dir() else Path.home())
+
+    def _fit_initial_window_to_content(self) -> None:
+        """화면에 여유가 있으면 바깥 스크롤이 생기지 않는 높이로 최초 창을 맞춥니다."""
+        self.page.ensurePolished()
+        page_layout = self.page.layout()
+        if page_layout is not None:
+            page_layout.activate()
+        screen = self.screen() or QApplication.primaryScreen()
+        available_size = screen.availableGeometry().size() if screen is not None else None
+        self.resize(_initial_window_size(available_size, self.page.minimumSizeHint()))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if self.load_job_button.isEnabled() and self._job_path_from_mime_data(event.mimeData()) is not None:
