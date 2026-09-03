@@ -4,7 +4,7 @@ YouTube 영상을 MP4 또는 MP3로 저장할 수 있는 Windows용 GUI 애플�
 
 [![Windows 설치 파일 다운로드](https://img.shields.io/badge/Windows-설치%20파일%20다운로드-2563EB?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/AIJeongwon/YTDownloader/releases/latest/download/YTDownloader-Setup.exe)
 
-버튼은 최신 GitHub Release의 `YTDownloader-Setup.exe`로 바로 연결됩니다. 아직 릴리스가 게시되지 않았다면 링크가 활성화되지 않습니다. 다른 버전과 SHA-256은 [전체 릴리스 목록](https://github.com/AIJeongwon/YTDownloader/releases)에서 확인할 수 있습니다.
+버튼은 최신 GitHub Release의 `YTDownloader-Setup.exe`로 바로 연결됩니다. 다른 버전과 SHA-256은 [전체 릴리스 목록](https://github.com/AIJeongwon/YTDownloader/releases)에서 확인할 수 있습니다.
 
 ## 주요 기능
 
@@ -29,8 +29,6 @@ Windows 10 64비트 이상에서 위의 다운로드 버튼을 누른 뒤 `YTDow
 
 YouTube 영상 주소와 저장 폴더를 입력하고 형식과 화질을 선택한 다음 `다운로드`를 누릅니다. 유효한 저장 폴더는 다음 실행에서도 유지됩니다.
 
-앱을 실행하면 GitHub의 최신 정식 릴리스를 확인합니다. 현재보다 새 버전이 있으면 다운로드 페이지를 열 수 있는 알림을 표시하며, `이 버전의 업데이트 알림을 다시 표시하지 않기`를 선택하면 같은 버전은 다시 알리지 않습니다. 이후 더 새로운 버전이 게시되면 다시 알림을 표시합니다.
-
 구간 표를 비워 두면 전체 영상을 저장합니다. 일부 구간만 저장하려면 `+ 구간 추가`를 누르고 파일 제목, 시작 시간과 종료 시간을 입력합니다. 등록한 구간은 위에서부터 차례대로 각각 다른 파일로 저장됩니다.
 
 시간은 다음 형식으로 입력할 수 있습니다.
@@ -45,6 +43,12 @@ YouTube 영상 주소와 저장 폴더를 입력하고 형식과 화질을 선�
 
 창의 최소 크기는 `760×640`입니다. 화면이 작은 경우 전체 화면을 스크롤해 아래쪽 상태와 다운로드 버튼으로 이동할 수 있습니다.
 
+## 업데이트
+
+앱을 실행하면 포함된 `yt-dlp`를 공식 최신 안정판으로 자동 갱신합니다.
+
+YTDownloader 자체는 자동으로 설치하지 않습니다. GitHub의 최신 정식 릴리스가 현재 버전보다 새 버전이면 다운로드 페이지를 열 수 있는 알림을 표시합니다. `이 버전의 업데이트 알림을 다시 표시하지 않기`를 선택하면 같은 버전은 다시 알리지 않으며, 이후 더 새로운 버전이 게시되면 다시 알림을 표시합니다.
+
 ## 쿠키 파일
 
 쿠키 파일은 로그인이 필요하거나 연령 제한이 있는 영상을 받을 때 선택적으로 사용합니다. Netscape 형식의 `cookies.txt` 파일을 선택할 수 있으며, 일반 공개 영상에는 필요하지 않습니다. 쿠키에는 로그인 정보가 포함될 수 있으므로 다른 사람과 공유하지 마세요.
@@ -54,6 +58,8 @@ YouTube 영상 주소와 저장 폴더를 입력하고 형식과 화질을 선�
 `작업 저장`을 누르면 현재 YouTube 주소와 구간 목록을 `.ytdjob` 파일로 저장합니다. `작업 불러오기`를 누르거나 `.ytdjob` 파일 하나를 앱 창으로 끌어다 놓으면 다시 불러올 수 있습니다.
 
 저장 폴더와 쿠키 파일은 작업 파일에 포함되지 않습니다.
+
+작업 파일의 `version`은 YTDownloader 앱 버전이 아니라 `.ytdjob` 파일 형식의 버전입니다.
 
 ```json
 {
@@ -84,7 +90,7 @@ py -3 -m venv .venv
 .\.venv\Scripts\pythonw.exe -m ytdownloader
 ```
 
-설치 후에는 `run.cmd`를 더블클릭해 실행할 수도 있습니다. 개발 환경의 `bin` 폴더에 필요한 외부 도구가 없으면 `yt-dlp`만 자동으로 설치되며, FFmpeg와 ffprobe는 별도로 준비해야 합니다.
+위 명령으로 개발 환경을 준비한 후에는 `run.cmd`를 더블클릭해 실행할 수도 있습니다. 개발 환경의 `bin` 폴더에 필요한 외부 도구가 없으면 `yt-dlp`만 자동으로 설치되며, FFmpeg와 ffprobe는 별도로 준비해야 합니다.
 
 ## 테스트와 Windows 설치 파일 빌드
 
