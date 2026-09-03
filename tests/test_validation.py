@@ -5,7 +5,15 @@ import unittest
 from pathlib import Path
 
 from ytdownloader.models import MediaKind
-from ytdownloader.validation import ValidationError, build_request, format_time, parse_time, validate_file_stem, validate_youtube_url
+from ytdownloader.validation import (
+    ValidationError,
+    build_request,
+    format_time,
+    parse_time,
+    validate_file_stem,
+    validate_youtube_url,
+    youtube_video_id,
+)
 
 
 class UrlValidationTests(unittest.TestCase):
@@ -45,6 +53,16 @@ class UrlValidationTests(unittest.TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 validate_youtube_url(value)
+
+    def test_video_id_is_extracted_from_supported_urls(self) -> None:
+        for url in (
+            "https://youtu.be/abcdefghijk",
+            "https://www.youtube.com/watch?v=abcdefghijk",
+            "https://youtube.com/shorts/abcdefghijk",
+            "https://youtube.com/live/abcdefghijk",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(youtube_video_id(url), "abcdefghijk")
 
 
 class TimeValidationTests(unittest.TestCase):

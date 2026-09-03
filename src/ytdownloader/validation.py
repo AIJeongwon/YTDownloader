@@ -82,6 +82,18 @@ def _is_youtube_video_path(host: str, path: str, query: str) -> bool:
     return match is not None
 
 
+def youtube_video_id(raw_url: str) -> str:
+    """검증된 YouTube 단일 영상 주소에서 11자리 영상 ID를 반환합니다."""
+    normalized = validate_youtube_url(raw_url)
+    parsed = urlsplit(normalized)
+    host = (parsed.hostname or "").lower()
+    if host == "youtu.be":
+        return parsed.path.strip("/")
+    if parsed.path == "/watch":
+        return parse_qs(parsed.query, keep_blank_values=True)["v"][0]
+    return parsed.path.rstrip("/").rsplit("/", 1)[-1]
+
+
 def parse_time(raw_value: str, field_name: str) -> float | None:
     """빈 값, 숫자 HHMMSS 또는 콜론 형식의 1000시간 미만 시간을 초로 변환합니다."""
     value = raw_value.strip()
@@ -151,6 +163,18 @@ def validate_file_stem(raw_value: str) -> str:
     return value
 
 
+def validate_cookie_file(raw_value: str) -> Path | None:
+    """선택한 쿠키 파일의 존재 여부와 크기를 확인합니다."""
+    if not raw_value.strip():
+        return None
+    cookie = Path(raw_value.strip()).expanduser()
+    if not cookie.is_file():
+        raise ValidationError("선택한 쿠키 파일을 찾을 수 없습니다.")
+    if cookie.stat().st_size > 20 * 1024 * 1024:
+        raise ValidationError("쿠키 파일은 20MiB보다 작아야 합니다.")
+    return cookie.resolve()
+
+
 def build_request(
     *,
     url: str,
@@ -188,14 +212,7 @@ def build_request(
     elif file_stem.strip():
         raise ValidationError("파일 제목 지정은 구간 다운로드에서만 사용합니다.")
 
-    cookie: Path | None = None
-    if cookie_file.strip():
-        cookie = Path(cookie_file.strip()).expanduser()
-        if not cookie.is_file():
-            raise ValidationError("선택한 쿠키 파일을 찾을 수 없습니다.")
-        if cookie.stat().st_size > 20 * 1024 * 1024:
-            raise ValidationError("쿠키 파일은 20MiB보다 작아야 합니다.")
-        cookie = cookie.resolve()
+    cookie = validate_cookie_file(cookie_file)
 
     return DownloadRequest(
         url=normalized_url,

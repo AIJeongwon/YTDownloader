@@ -30,8 +30,11 @@ from PySide6.QtGui import (
     QDragLeaveEvent,
     QDropEvent,
     QFont,
+    QImageReader,
+    QPixmap,
     QWheelEvent,
 )
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -74,13 +77,31 @@ from .models import DownloadRequest, MediaKind
 from .process_control import terminate_process_tree
 from .tools import ToolError, ToolPaths, discover_tools
 from .updater import UpdateResult, YtDlpUpdater
-from .validation import ValidationError, build_request, format_time, parse_time
+from .validation import (
+    ValidationError,
+    build_request,
+    format_time,
+    parse_time,
+    validate_cookie_file,
+    validate_youtube_url,
+)
+from .video_info import (
+    VideoInfo,
+    VideoInfoError,
+    build_video_info_arguments,
+    format_duration,
+    parse_video_info,
+    validate_request_durations,
+    validate_thumbnail_url,
+)
 
 _VISIBLE_SEGMENT_ROWS = 6
 _SEGMENT_ROW_HEIGHT = 40
 _MINIMUM_WINDOW_SIZE = QSize(760, 640)
 _PREFERRED_WINDOW_SIZE = QSize(880, 980)
 _INITIAL_SCREEN_MARGIN = 64
+_THUMBNAIL_SIZE = QSize(144, 81)
+_MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 _SEGMENT_HELP = """구간을 추가하면 각 행을 서로 다른 파일로 저장합니다.
 
 • 파일 제목: 확장자를 제외한 저장 이름
@@ -255,7 +276,10 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
+        QImageReader.setAllocationLimit(32)
         self._settings = QSettings()
+        self._network_manager = QNetworkAccessManager(self)
+        self._tools_ready = False
         self._process: QProcess | None = None
         self._stdout_buffer = ""
         self._stderr_buffer = ""
@@ -268,6 +292,17 @@ class MainWindow(QMainWindow):
         self._update_worker: _UpdateWorker | None = None
         self._app_update_thread: QThread | None = None
         self._app_update_worker: _AppUpdateWorker | None = None
+        self._video_info_process: QProcess | None = None
+        self._video_info: VideoInfo | None = None
+        self._video_info_cookie: Path | None = None
+        self._video_info_query_url: str | None = None
+        self._video_info_query_cookie: Path | None = None
+        self._video_info_timed_out = False
+        self._video_info_refresh_requested = False
+        self._download_after_video_info = False
+        self._thumbnail_reply: QNetworkReply | None = None
+        self._thumbnail_data = bytearray()
+        self._thumbnail_too_large = False
         self._close_after_update = False
 
         self.setWindowTitle("YTDownloader")
@@ -306,11 +341,57 @@ class MainWindow(QMainWindow):
         form.setVerticalSpacing(16)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
+        url_row = QWidget()
+        url_layout = QHBoxLayout(url_row)
+        url_layout.setContentsMargins(0, 0, 0, 0)
+        url_layout.setSpacing(8)
         self.url_edit = QLineEdit()
         self.url_edit.setAcceptDrops(False)
         self.url_edit.setPlaceholderText("https://www.youtube.com/watch?v=...")
         self.url_edit.setClearButtonEnabled(True)
-        form.addRow("YouTube 주소", self.url_edit)
+        self.url_edit.textChanged.connect(self._invalidate_video_info)
+        self.url_edit.editingFinished.connect(self._request_video_info)
+        self.video_info_button = QPushButton("정보 확인")
+        self.video_info_button.setObjectName("compactButton")
+        self.video_info_button.setEnabled(False)
+        self.video_info_button.clicked.connect(lambda: self._request_video_info(force=True))
+        url_layout.addWidget(self.url_edit, 1)
+        url_layout.addWidget(self.video_info_button)
+        form.addRow("YouTube 주소", url_row)
+
+        self.video_info_card = QFrame()
+        self.video_info_card.setObjectName("videoInfoCard")
+        video_info_layout = QHBoxLayout(self.video_info_card)
+        video_info_layout.setContentsMargins(12, 10, 12, 10)
+        video_info_layout.setSpacing(14)
+        self.video_thumbnail = QLabel("미리보기")
+        self.video_thumbnail.setObjectName("videoThumbnail")
+        self.video_thumbnail.setFixedSize(_THUMBNAIL_SIZE)
+        self.video_thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.video_thumbnail.setAccessibleName("영상 썸네일")
+        video_info_layout.addWidget(self.video_thumbnail)
+        video_text_layout = QVBoxLayout()
+        video_text_layout.setContentsMargins(0, 0, 0, 0)
+        video_text_layout.setSpacing(4)
+        self.video_title = QLabel("주소를 입력하면 영상 정보를 확인합니다.")
+        self.video_title.setObjectName("videoTitle")
+        self.video_title.setWordWrap(True)
+        self.video_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.video_metadata = QLabel("제목 · 채널 · 길이")
+        self.video_metadata.setObjectName("muted")
+        self.video_metadata.setWordWrap(True)
+        self.video_info_status = QLabel("")
+        self.video_info_status.setObjectName("videoInfoStatus")
+        self.video_info_status.setWordWrap(True)
+        video_text_layout.addWidget(self.video_title)
+        video_text_layout.addWidget(self.video_metadata)
+        video_text_layout.addWidget(self.video_info_status)
+        video_text_layout.addStretch(1)
+        video_info_layout.addLayout(video_text_layout, 1)
+        self.video_info_label = QLabel("영상 정보")
+        form.addRow(self.video_info_label, self.video_info_card)
+        self.video_info_label.hide()
+        self.video_info_card.hide()
 
         output_row = QWidget()
         output_layout = QHBoxLayout(output_row)
@@ -404,6 +485,7 @@ class MainWindow(QMainWindow):
         self.cookie_edit = QLineEdit()
         self.cookie_edit.setAcceptDrops(False)
         self.cookie_edit.setPlaceholderText("선택 사항 · Netscape 형식 cookies.txt")
+        self.cookie_edit.textChanged.connect(self._invalidate_video_info)
         self.cookie_button = QPushButton("선택")
         self.cookie_button.clicked.connect(self._select_cookie_file)
         cookie_layout.addWidget(self.cookie_edit, 1)
@@ -472,6 +554,12 @@ class MainWindow(QMainWindow):
             QLabel#status { font-weight: 600; }
             QFrame#card { background: #182235; border: 1px solid #263449; border-radius: 14px; }
             QFrame#card[jobDropActive="true"] { border: 2px solid #3b82f6; }
+            QFrame#videoInfoCard { background: #101827; border: 1px solid #334155; border-radius: 10px; }
+            QLabel#videoThumbnail {
+                background: #0b1220; color: #64748b; border: 1px solid #263449; border-radius: 7px;
+            }
+            QLabel#videoTitle { color: #f8fafc; font-weight: 700; }
+            QLabel#videoInfoStatus { color: #fbbf24; }
             QLineEdit, QComboBox, QPlainTextEdit {
                 background: #101827; border: 1px solid #334155; border-radius: 8px;
                 padding: 9px 11px; selection-background-color: #2563eb;
@@ -622,6 +710,262 @@ class MainWindow(QMainWindow):
         selected, _ = QFileDialog.getOpenFileName(self, "쿠키 파일 선택", "", "텍스트 파일 (*.txt);;모든 파일 (*)")
         if selected:
             self.cookie_edit.setText(selected)
+
+    @Slot(str)
+    def _invalidate_video_info(self, _text: str = "") -> None:
+        """주소나 쿠키가 바뀌면 이전 미리보기와 길이 검증 결과를 폐기합니다."""
+        self._video_info = None
+        self._video_info_cookie = None
+        self._cancel_thumbnail_request()
+        self.video_thumbnail.clear()
+        self.video_thumbnail.setText("미리보기")
+        self.video_title.setText("주소를 입력하면 영상 정보를 확인합니다.")
+        self.video_metadata.setText("제목 · 채널 · 길이")
+        self.video_info_status.clear()
+        self._set_video_info_visible(False)
+
+    def _request_video_info(self, *, force: bool = False, for_download: bool = False) -> None:
+        """현재 주소의 정보를 별도 yt-dlp 프로세스로 비동기 조회합니다."""
+        if for_download:
+            self._download_after_video_info = True
+        if not self._tools_ready:
+            self._download_after_video_info = False
+            self._set_video_info_visible(True)
+            self.video_info_status.setText("yt-dlp 확인이 끝난 뒤 영상 정보를 확인할 수 있습니다.")
+            return
+        try:
+            normalized_url = validate_youtube_url(self.url_edit.text())
+            cookie_file = validate_cookie_file(self.cookie_edit.text())
+        except (ValidationError, OSError) as error:
+            self._video_info_failure(str(error))
+            return
+
+        if self._video_info_process is not None:
+            self._video_info_refresh_requested = True
+            self._set_video_info_visible(True)
+            self.video_info_status.setText("진행 중인 영상 정보 확인을 기다리고 있습니다…")
+            return
+        if (
+            not force
+            and self._video_info is not None
+            and self._video_info.url == normalized_url
+            and self._video_info_cookie == cookie_file
+        ):
+            if self._download_after_video_info:
+                self._download_after_video_info = False
+                QTimer.singleShot(0, self._start_download)
+            return
+
+        try:
+            tools = discover_tools()
+        except (ToolError, OSError) as error:
+            self._video_info_failure(str(error))
+            return
+
+        self._video_info_query_url = normalized_url
+        self._video_info_query_cookie = cookie_file
+        self._video_info_timed_out = False
+        self._set_video_info_visible(True)
+        self.video_title.setText("영상 정보를 확인하고 있습니다…")
+        self.video_metadata.setText("잠시만 기다려 주세요.")
+        self.video_info_status.clear()
+        self.video_thumbnail.clear()
+        self.video_thumbnail.setText("불러오는 중")
+        self.video_info_button.setEnabled(False)
+        if self._download_after_video_info:
+            self.download_button.setEnabled(False)
+
+        process = QProcess(self)
+        environment = QProcessEnvironment.systemEnvironment()
+        environment.insert("YTDLP_NO_PLUGINS", "1")
+        process.setProcessEnvironment(environment)
+        process.setProgram(str(tools.yt_dlp))
+        process.setArguments(build_video_info_arguments(normalized_url, tools, cookie_file))
+        process.finished.connect(self._video_info_finished)
+        process.errorOccurred.connect(self._video_info_process_error)
+        self._video_info_process = process
+        process.start()
+        QTimer.singleShot(30_000, lambda target=process: self._video_info_timeout(target))
+
+    def _video_info_timeout(self, process: QProcess) -> None:
+        """영상 정보 조회가 제한 시간을 넘으면 해당 프로세스 트리만 종료합니다."""
+        if self._video_info_process is not process or process.state() == QProcess.ProcessState.NotRunning:
+            return
+        self._video_info_timed_out = True
+        self._stop_download_process(process, force=True)
+
+    @Slot(int, QProcess.ExitStatus)
+    def _video_info_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
+        process = self._video_info_process
+        if process is None:
+            return
+        stdout = bytes(process.readAllStandardOutput())
+        stderr = bytes(process.readAllStandardError()).decode("utf-8", "replace")
+        process.deleteLater()
+        self._video_info_process = None
+        self.video_info_button.setEnabled(self._tools_ready and self._process is None)
+        self.download_button.setEnabled(self._tools_ready and self._process is None)
+
+        if self._video_info_timed_out:
+            self._video_info_failure("영상 정보 확인 시간이 초과되었습니다.", stderr)
+            return
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code != 0:
+            self._video_info_failure("영상 정보를 확인하지 못했습니다.", stderr)
+            return
+        try:
+            if self._video_info_query_url is None:
+                raise VideoInfoError("영상 정보 요청 주소를 확인할 수 없습니다.")
+            video_info = parse_video_info(stdout, self._video_info_query_url)
+            current_url = validate_youtube_url(self.url_edit.text())
+            current_cookie = validate_cookie_file(self.cookie_edit.text())
+        except (VideoInfoError, ValidationError, OSError) as error:
+            self._video_info_failure(str(error), stderr)
+            return
+
+        if current_url != video_info.url or current_cookie != self._video_info_query_cookie:
+            pending_download = self._download_after_video_info
+            refresh_requested = self._video_info_refresh_requested
+            self._download_after_video_info = False
+            self._video_info_refresh_requested = False
+            self.video_info_status.setText("입력이 변경되어 영상 정보를 다시 확인해야 합니다.")
+            if pending_download:
+                QTimer.singleShot(0, self._start_download)
+            elif refresh_requested:
+                QTimer.singleShot(0, self._request_video_info)
+            return
+
+        self._video_info_refresh_requested = False
+        self._video_info = video_info
+        self._video_info_cookie = current_cookie
+        self._render_video_info(video_info)
+        self._load_video_thumbnail(video_info)
+        pending_download = self._download_after_video_info
+        self._download_after_video_info = False
+        if pending_download:
+            QTimer.singleShot(0, self._start_download)
+
+    @Slot(QProcess.ProcessError)
+    def _video_info_process_error(self, error: QProcess.ProcessError) -> None:
+        if error != QProcess.ProcessError.FailedToStart or self._video_info_process is None:
+            return
+        process = self._video_info_process
+        self._video_info_process = None
+        process.deleteLater()
+        self.video_info_button.setEnabled(self._tools_ready and self._process is None)
+        self.download_button.setEnabled(self._tools_ready and self._process is None)
+        self._video_info_failure("영상 정보 확인을 위한 yt-dlp를 시작하지 못했습니다.")
+
+    def _video_info_failure(self, message: str, details: str = "") -> None:
+        """미리보기 실패를 표시하고 대기 중인 다운로드를 안전하게 취소합니다."""
+        pending_download = self._download_after_video_info
+        refresh_requested = self._video_info_refresh_requested
+        self._download_after_video_info = False
+        self._video_info_refresh_requested = False
+        self._set_video_info_visible(True)
+        self.video_title.setText("영상 정보를 확인하지 못했습니다.")
+        self.video_metadata.clear()
+        self.video_info_status.setText(message)
+        self.video_thumbnail.clear()
+        self.video_thumbnail.setText("미리보기\n없음")
+        self.video_info_button.setEnabled(self._tools_ready and self._process is None)
+        self.download_button.setEnabled(self._tools_ready and self._process is None)
+        detail_line = next((line.strip() for line in reversed(details.splitlines()) if line.strip()), "")
+        if detail_line:
+            self._append_log(f"영상 정보 확인 실패: {detail_line[:500]}")
+        if refresh_requested:
+            if pending_download:
+                self._download_after_video_info = True
+            QTimer.singleShot(0, self._request_video_info)
+        elif pending_download:
+            QMessageBox.warning(self, "영상 정보 확인 필요", message)
+
+    def _render_video_info(self, video_info: VideoInfo) -> None:
+        self._set_video_info_visible(True)
+        self.video_title.setText(video_info.title)
+        self.video_metadata.setText(
+            f"{video_info.channel}  ·  {format_duration(video_info.duration_seconds)}"
+        )
+        if video_info.duration_seconds is None:
+            self.video_info_status.setText("길이 정보가 없어 구간 범위 검사를 생략합니다.")
+        else:
+            self.video_info_status.clear()
+
+    def _set_video_info_visible(self, visible: bool) -> None:
+        self.video_info_label.setVisible(visible)
+        self.video_info_card.setVisible(visible)
+
+    def _load_video_thumbnail(self, video_info: VideoInfo) -> None:
+        """고정된 YouTube 정적 이미지 주소에서 크기가 제한된 썸네일을 받습니다."""
+        self._cancel_thumbnail_request()
+        request = QNetworkRequest(QUrl(video_info.thumbnail_url))
+        request.setTransferTimeout(15_000)
+        request.setMaximumRedirectsAllowed(0)
+        request.setAttribute(
+            QNetworkRequest.Attribute.RedirectPolicyAttribute,
+            QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
+        )
+        reply = self._network_manager.get(request)
+        self._thumbnail_reply = reply
+        self._thumbnail_data = bytearray()
+        self._thumbnail_too_large = False
+        reply.readyRead.connect(lambda target=reply: self._read_thumbnail(target))
+        reply.finished.connect(
+            lambda target=reply, expected_id=video_info.video_id: self._thumbnail_finished(
+                target, expected_id
+            )
+        )
+
+    def _read_thumbnail(self, reply: QNetworkReply) -> None:
+        if self._thumbnail_reply is not reply:
+            return
+        chunk = bytes(reply.readAll())
+        if len(self._thumbnail_data) + len(chunk) > _MAX_THUMBNAIL_BYTES:
+            self._thumbnail_too_large = True
+            reply.abort()
+            return
+        self._thumbnail_data.extend(chunk)
+
+    def _thumbnail_finished(self, reply: QNetworkReply, expected_id: str) -> None:
+        if self._thumbnail_reply is not reply:
+            reply.deleteLater()
+            return
+        self._read_thumbnail(reply)
+        self._thumbnail_reply = None
+        content_type = str(reply.header(QNetworkRequest.KnownHeaders.ContentTypeHeader) or "").lower()
+        valid_response = (
+            not self._thumbnail_too_large
+            and reply.error() == QNetworkReply.NetworkError.NoError
+            and content_type.startswith("image/")
+            and validate_thumbnail_url(reply.url().toString(), expected_id)
+            and self._video_info is not None
+            and self._video_info.video_id == expected_id
+        )
+        pixmap = QPixmap()
+        if valid_response:
+            valid_response = pixmap.loadFromData(bytes(self._thumbnail_data))
+        if valid_response and pixmap.width() <= 4096 and pixmap.height() <= 4096:
+            self.video_thumbnail.setPixmap(
+                pixmap.scaled(
+                    _THUMBNAIL_SIZE,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            self.video_thumbnail.clear()
+            self.video_thumbnail.setText("미리보기\n없음")
+        self._thumbnail_data = bytearray()
+        self._thumbnail_too_large = False
+        reply.deleteLater()
+
+    def _cancel_thumbnail_request(self) -> None:
+        reply = self._thumbnail_reply
+        self._thumbnail_reply = None
+        self._thumbnail_data = bytearray()
+        self._thumbnail_too_large = False
+        if reply is not None:
+            reply.abort()
+            reply.deleteLater()
 
     @Slot()
     def _show_segment_help(self) -> None:
@@ -778,7 +1122,11 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self.status_label.setText(result.message)
         self._append_log(result.message)
+        self._tools_ready = result.ready
         self.download_button.setEnabled(result.ready)
+        self.video_info_button.setEnabled(result.ready)
+        if result.ready and self.url_edit.text().strip():
+            QTimer.singleShot(0, self._request_video_info)
 
     @Slot()
     def _release_update_thread(self) -> None:
@@ -849,6 +1197,20 @@ class MainWindow(QMainWindow):
             tools = discover_tools()
         except (ValidationError, ToolError, OSError) as error:
             QMessageBox.warning(self, "확인 필요", str(error))
+            return
+
+        current_info = self._video_info
+        if (
+            current_info is None
+            or current_info.url != requests[0].url
+            or self._video_info_cookie != requests[0].cookie_file
+        ):
+            self._request_video_info(for_download=True)
+            return
+        try:
+            validate_request_durations(requests, current_info)
+        except ValidationError as error:
+            QMessageBox.warning(self, "구간 확인 필요", str(error))
             return
 
         self._remember_output_directory()
@@ -1062,7 +1424,7 @@ class MainWindow(QMainWindow):
             return
 
     def _set_running(self, running: bool) -> None:
-        self.download_button.setEnabled(not running)
+        self.download_button.setEnabled(self._tools_ready and not running)
         self.cancel_button.setEnabled(running)
         for widget in (
             self.url_edit,
@@ -1074,11 +1436,15 @@ class MainWindow(QMainWindow):
             self.add_segment_button,
             self.load_job_button,
             self.save_job_button,
+            self.video_info_button,
             self.cookie_edit,
             self.cookie_button,
         ):
             widget.setEnabled(not running)
         if not running:
+            self.video_info_button.setEnabled(
+                self._tools_ready and self._video_info_process is None
+            )
             self._sync_media_options()
 
     def _append_log(self, message: str) -> None:
@@ -1092,6 +1458,21 @@ class MainWindow(QMainWindow):
             if not process.waitForFinished(3000):
                 process.kill()
                 process.waitForFinished(1000)
+        if (
+            self._video_info_process is not None
+            and self._video_info_process.state() != QProcess.ProcessState.NotRunning
+        ):
+            video_info_process = self._video_info_process
+            video_info_process.blockSignals(True)
+            self._stop_download_process(video_info_process, force=True)
+            if not video_info_process.waitForFinished(3000):
+                video_info_process.kill()
+                video_info_process.waitForFinished(1000)
+            video_info_process.deleteLater()
+            self._video_info_process = None
+        self._download_after_video_info = False
+        self._video_info_refresh_requested = False
+        self._cancel_thumbnail_request()
         background_check_running = (
             self._update_thread is not None
             and self._update_thread.isRunning()

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QAbstractItemView, QApplication, QMessageBox
 from ytdownloader.gui import MainWindow, _initial_window_size
 from ytdownloader.job_files import create_job_document, save_job_file
 from ytdownloader.validation import ValidationError
+from ytdownloader.video_info import VideoInfo
 
 
 class GuiSegmentTests(unittest.TestCase):
@@ -170,6 +171,38 @@ class GuiSegmentTests(unittest.TestCase):
         self.assertEqual(window.root_scroll.verticalScrollBar().maximum(), 0)
         self.assertLess(button_bottom, window.root_scroll.viewport().height())
         window.close()
+
+    def test_video_info_preview_appears_after_metadata_is_applied(self) -> None:
+        window = MainWindow()
+        info = VideoInfo(
+            "https://youtu.be/abcdefghijk",
+            "abcdefghijk",
+            "미리보기 제목",
+            "테스트 채널",
+            123,
+            "not_live",
+        )
+        self.assertTrue(window.video_info_card.isHidden())
+        with patch.object(window, "_load_video_thumbnail"):
+            window._render_video_info(info)
+        self.assertFalse(window.video_info_card.isHidden())
+        self.assertEqual(window.video_title.text(), "미리보기 제목")
+        self.assertIn("테스트 채널", window.video_metadata.text())
+        self.assertIn("00:02:03", window.video_metadata.text())
+        window.close()
+
+    def test_download_waits_for_matching_video_info(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = self._window_with_two_rows(directory)
+            window._tools_ready = True
+            with (
+                patch("ytdownloader.gui.discover_tools", return_value=Mock()),
+                patch.object(window, "_request_video_info") as request_info,
+            ):
+                window._start_download()
+            request_info.assert_called_once_with(for_download=True)
+            self.assertIsNone(window._process)
+            window.close()
 
     def test_initial_size_is_limited_to_the_available_screen(self) -> None:
         self.assertEqual(_initial_window_size(QSize(1920, 1080)), QSize(880, 980))
