@@ -146,7 +146,19 @@
     {
       "id": "ffmpeg-dependencies-source",
       "title": "FFmpeg GPL 공유 빌드에 포함된 의존 라이브러리 대응 소스",
-      "filename": "ffmpeg-dependencies-ea2ec3c0-source.tar"
+      "filename": "ffmpeg-dependencies-ea2ec3c0-source.tar",
+      "input_filename": "ffmpeg-builds-ea2ec3c0-source.tar.gz",
+      "release_tag": "ffmpeg-sources-9fc8c785e2-ea2ec3c0e0"
+    }
+  ],
+  "reusable_source_assets": [
+    {
+      "id": "ffmpeg-dependencies-source",
+      "title": "FFmpeg GPL 공유 빌드에 포함된 의존 라이브러리 대응 소스",
+      "filename": "ffmpeg-dependencies-ea2ec3c0-source.tar",
+      "url": "https://github.com/AIJeongwon/YTDownloader/releases/download/v0.1.4/ffmpeg-dependencies-ea2ec3c0-source.tar",
+      "size": 1973227520,
+      "sha256": "05f5ea866591591606e12b87f5fb062d9617497f7fa6e061219f597753930f44"
     }
   ],
   "source_assets": [

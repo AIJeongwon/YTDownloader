@@ -4,7 +4,7 @@ YouTube 영상을 MP4 또는 MP3로 저장할 수 있는 Windows용 GUI 애플�
 
 [![Windows 설치 파일 다운로드](https://img.shields.io/badge/Windows-설치%20파일%20다운로드-2563EB?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/AIJeongwon/YTDownloader/releases/latest/download/YTDownloader-Setup.exe)
 
-버튼은 최신 GitHub Release의 `YTDownloader-Setup.exe`로 바로 연결됩니다. 다른 버전과 SHA-256은 [전체 릴리스 목록](https://github.com/AIJeongwon/YTDownloader/releases)에서 확인할 수 있습니다.
+버튼은 최신 GitHub Release의 `YTDownloader-Setup.exe`로 바로 연결됩니다. 다른 버전, SHA-256과 배포본 대응 소스는 [전체 릴리스 목록](https://github.com/AIJeongwon/YTDownloader/releases)에서 확인할 수 있습니다.
 
 ## 주요 기능
 

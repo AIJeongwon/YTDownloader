@@ -1,0 +1,107 @@
+name: FFmpeg 대응 소스 생성
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffmpeg-sources-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - name: 소스 받기
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Python 준비
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13.15"
+
+      - name: 검증된 FFmpeg-Builds 소스 준비
+        run: |
+          python deployment/prepare_assets.py generated-input \
+            --manifest deployment/assets.json \
+            --cache build/bootstrap \
+            --output build/source-assets \
+            --python-version 3.13.15 \
+            --source-id ffmpeg-dependencies-source
+
+      - name: 생성 대상 확인
+        id: source
+        shell: bash
+        run: |
+          filename=$(python deployment/reusable_sources.py generated-field \
+            --manifest deployment/assets.json \
+            --id ffmpeg-dependencies-source \
+            --field filename)
+          input_filename=$(python deployment/reusable_sources.py generated-field \
+            --manifest deployment/assets.json \
+            --id ffmpeg-dependencies-source \
+            --field input_filename)
+          release_tag=$(python deployment/reusable_sources.py generated-field \
+            --manifest deployment/assets.json \
+            --id ffmpeg-dependencies-source \
+            --field release_tag)
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          echo "input_filename=$input_filename" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: 기존 대응 소스 릴리스 확인
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.source.outputs.release_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "같은 대응 소스 릴리스가 이미 있습니다: ${{ steps.source.outputs.release_tag }}" >&2
+            exit 1
+          fi
+
+      - name: FFmpeg 의존 대응 소스 생성
+        shell: bash
+        run: |
+          output="build/${{ steps.source.outputs.filename }}"
+          bash deployment/package_ffmpeg_sources.sh \
+            "build/source-assets/${{ steps.source.outputs.input_filename }}" \
+            "$output"
+          size=$(stat -c '%s' "$output")
+          max_release_asset_size=$((2 * 1024 * 1024 * 1024))
+          if (( size >= max_release_asset_size )); then
+            echo "생성된 대응 소스가 GitHub 자산 제한을 초과합니다: $size" >&2
+            exit 1
+          fi
+          sha256sum "$output" > "$output.sha256"
+
+      - name: 대응 소스 전용 릴리스 게시
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          output="build/${{ steps.source.outputs.filename }}"
+          gh release create "${{ steps.source.outputs.release_tag }}" \
+            "$output" \
+            "$output.sha256" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "FFmpeg 대응 소스 ${{ steps.source.outputs.release_tag }}" \
+            --notes "FFmpeg 실행 파일과 정확히 대응하는 의존 라이브러리 소스입니다. 앱 릴리스 전 deployment/assets.json의 reusable_source_assets를 이 자산 정보로 갱신해야 합니다." \
+            --prerelease
+
+      - name: 다음 작업 안내
+        shell: bash
+        run: |
+          {
+            echo "## 대응 소스 게시 완료"
+            echo
+            echo "앱을 릴리스하기 전에 deployment/assets.json의 reusable_source_assets URL, 크기, SHA-256을 갱신하세요."
+            echo "릴리스: https://github.com/${{ github.repository }}/releases/tag/${{ steps.source.outputs.release_tag }}"
+          } >> "$GITHUB_STEP_SUMMARY"

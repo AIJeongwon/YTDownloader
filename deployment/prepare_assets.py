@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 import urllib.request
@@ -316,14 +317,69 @@ def generated_source_assets(manifest: dict[str, object]) -> list[dict[str, str]]
     for value in values:
         if not isinstance(value, dict):
             raise AssetError("생성 대응 소스 항목이 올바르지 않습니다.")
-        if not all(isinstance(value.get(key), str) and value[key] for key in ("id", "title", "filename")):
+        required = ("id", "title", "filename", "input_filename", "release_tag")
+        if not all(isinstance(value.get(key), str) and value[key] for key in required):
             raise AssetError("생성 대응 소스 항목의 필수 필드가 올바르지 않습니다.")
         filename = str(value["filename"])
         if Path(filename).name != filename or filename.casefold() in names:
             raise AssetError(f"생성 대응 소스 파일 이름이 올바르지 않습니다: {filename}")
+        input_filename = str(value["input_filename"])
+        if Path(input_filename).name != input_filename:
+            raise AssetError(f"생성 대응 소스 입력 파일 이름이 올바르지 않습니다: {input_filename}")
+        release_tag = str(value["release_tag"])
+        if re.fullmatch(r"ffmpeg-sources-[0-9a-f]{10,40}-[0-9a-f]{10,40}", release_tag) is None:
+            raise AssetError(f"생성 대응 소스 릴리스 태그가 올바르지 않습니다: {release_tag}")
         names.add(filename.casefold())
-        selected.append({key: str(value[key]) for key in ("id", "title", "filename")})
+        selected.append({key: str(value[key]) for key in required})
     return selected
+
+
+def reusable_source_assets(manifest: dict[str, object]) -> list[dict[str, object]]:
+    """이미 게시되어 재사용할 대응 소스 자산 정보를 검증합니다."""
+    values = manifest.get("reusable_source_assets")
+    if not isinstance(values, list):
+        raise AssetError("재사용 대응 소스 목록이 올바르지 않습니다.")
+    selected: list[dict[str, object]] = []
+    identifiers: set[str] = set()
+    names: set[str] = set()
+    for value in values:
+        record = validate_download_record(value)
+        identifier = record.get("id")
+        title = record.get("title")
+        filename = str(record["filename"])
+        if not isinstance(identifier, str) or not identifier or not isinstance(title, str) or not title:
+            raise AssetError("재사용 대응 소스 항목의 식별자 또는 제목이 올바르지 않습니다.")
+        if identifier.casefold() in identifiers or filename.casefold() in names:
+            raise AssetError("재사용 대응 소스 항목의 식별자 또는 파일 이름이 중복되었습니다.")
+        identifiers.add(identifier.casefold())
+        names.add(filename.casefold())
+        selected.append(record)
+    return selected
+
+
+def validate_reusable_source_mapping(manifest: dict[str, object]) -> None:
+    """생성 대상과 재사용 자산이 같은 대응 소스를 가리키는지 확인합니다."""
+    generated_records = generated_source_assets(manifest)
+    generated = {
+        (item["id"], item["title"], item["filename"])
+        for item in generated_records
+    }
+    reusable = {
+        (str(item["id"]), str(item["title"]), str(item["filename"]))
+        for item in reusable_source_assets(manifest)
+    }
+    if generated != reusable:
+        raise AssetError("생성 대상과 재사용 대응 소스 자산 정보가 일치하지 않습니다.")
+    source_values = manifest.get("source_assets")
+    if not isinstance(source_values, list):
+        raise AssetError("대응 소스 목록이 올바르지 않습니다.")
+    input_names = {
+        str(item.get("filename"))
+        for item in source_values
+        if isinstance(item, dict) and isinstance(item.get("filename"), str)
+    }
+    if any(item["input_filename"] not in input_names for item in generated_records):
+        raise AssetError("생성 대응 소스 입력 파일이 대응 소스 목록에 없습니다.")
 
 
 def validate_build_python(manifest: dict[str, object], python_version: str) -> None:
@@ -380,6 +436,8 @@ def prepare_sources(manifest: dict[str, object], cache: Path, output: Path, pyth
     """GitHub Release에 첨부할 대응 소스 아카이브를 준비합니다."""
     validate_build_python(manifest, python_version)
     records = selected_source_assets(manifest, python_version)
+    reusable_records = reusable_source_assets(manifest)
+    validate_reusable_source_mapping(manifest)
     for record in records:
         validated = validate_download_record(record)
         destination = safe_destination(output, str(validated["filename"]))
@@ -388,20 +446,61 @@ def prepare_sources(manifest: dict[str, object], cache: Path, output: Path, pyth
         output,
         output / "SOURCE-ASSETS.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "python_version": python_version,
-            "generated_files": [item["filename"] for item in generated_source_assets(manifest)],
+            "reusable_sources": [
+                {
+                    "id": item["id"],
+                    "title": item["title"],
+                    "filename": item["filename"],
+                    "url": item["url"],
+                    "size": item["size"],
+                    "sha256": str(item["sha256"]).lower(),
+                }
+                for item in reusable_records
+            ],
         },
     )
 
 
+def prepare_generated_source_input(
+    manifest: dict[str, object],
+    cache: Path,
+    output: Path,
+    python_version: str,
+    source_identifier: str,
+) -> None:
+    """수동 대응 소스 생성에 필요한 고정 입력 자산 하나를 준비합니다."""
+    validate_build_python(manifest, python_version)
+    generated_matches = [
+        item for item in generated_source_assets(manifest) if item["id"] == source_identifier
+    ]
+    if len(generated_matches) != 1:
+        raise AssetError(f"생성 대응 소스 항목 하나를 찾지 못했습니다: {source_identifier}")
+    input_filename = generated_matches[0]["input_filename"]
+    source_values = manifest.get("source_assets")
+    if not isinstance(source_values, list):
+        raise AssetError("대응 소스 목록이 올바르지 않습니다.")
+    input_matches = [
+        value
+        for value in source_values
+        if isinstance(value, dict) and value.get("filename") == input_filename
+    ]
+    if len(input_matches) != 1:
+        raise AssetError(f"생성 대응 소스 입력 자산 하나를 찾지 못했습니다: {input_filename}")
+    validated = validate_download_record(input_matches[0])
+    destination = safe_destination(output, input_filename)
+    copy_verified_asset(validated, cache, destination)
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="YTDownloader 배포 자산을 검증하고 준비합니다.")
-    parser.add_argument("mode", choices=("runtime", "sources"))
+    parser.add_argument("mode", choices=("runtime", "sources", "generated-input"))
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--python-version", default=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    parser.add_argument("--source-id")
     return parser.parse_args()
 
 
@@ -411,8 +510,18 @@ def main() -> int:
     arguments.output.mkdir(parents=True, exist_ok=True)
     if arguments.mode == "runtime":
         prepare_runtime(manifest, arguments.cache, arguments.output, arguments.python_version)
-    else:
+    elif arguments.mode == "sources":
         prepare_sources(manifest, arguments.cache, arguments.output, arguments.python_version)
+    else:
+        if not arguments.source_id:
+            raise AssetError("생성 대응 소스 식별자가 필요합니다.")
+        prepare_generated_source_input(
+            manifest,
+            arguments.cache,
+            arguments.output,
+            arguments.python_version,
+            arguments.source_id,
+        )
     return 0
 
 

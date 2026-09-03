@@ -10,9 +10,21 @@ import tomllib
 from pathlib import Path
 
 try:
-    from .prepare_assets import AssetError, generated_source_assets, load_manifest, selected_source_assets
+    from .prepare_assets import (
+        AssetError,
+        load_manifest,
+        reusable_source_assets,
+        selected_source_assets,
+        validate_reusable_source_mapping,
+    )
 except ImportError:
-    from prepare_assets import AssetError, generated_source_assets, load_manifest, selected_source_assets
+    from prepare_assets import (
+        AssetError,
+        load_manifest,
+        reusable_source_assets,
+        selected_source_assets,
+        validate_reusable_source_mapping,
+    )
 
 
 VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.([0-9]+))?$")
@@ -99,7 +111,9 @@ def write_source_offer(
     """설치본과 정확히 대응하는 소스 다운로드 안내를 작성합니다."""
     repository_url = normalize_repository_url(repository_url)
     manifest = load_manifest(manifest_path)
-    records = [*selected_source_assets(manifest, python_version), *generated_source_assets(manifest)]
+    records = selected_source_assets(manifest, python_version)
+    reusable_records = reusable_source_assets(manifest)
+    validate_reusable_source_mapping(manifest)
     release_url = f"{repository_url}/releases/download/v{version}"
     lines = [
         "YTDownloader 소스 코드 및 제3자 소프트웨어 대응 소스",
@@ -111,10 +125,21 @@ def write_source_offer(
     ]
     for record in records:
         lines.append(f"- {record['title']}: {release_url}/{record['filename']}")
+    if reusable_records:
+        lines.extend(
+            [
+                "",
+                "용량이 큰 다음 대응 소스는 검증된 기존 릴리스 자산을 재사용합니다.",
+            ]
+        )
+        for record in reusable_records:
+            lines.append(f"- {record['title']}: {record['url']}")
+            lines.append(f"  SHA-256: {str(record['sha256']).lower()}")
     lines.extend(
         [
             "",
-            "모든 릴리스 파일의 SHA-256은 같은 릴리스의 SHA256SUMS.txt에서 확인할 수 있습니다.",
+            "같은 릴리스 파일의 SHA-256은 SHA256SUMS.txt에서 확인할 수 있습니다.",
+            "재사용 대응 소스의 SHA-256은 위 값과 SOURCE-ASSETS.json에 기록되어 있습니다.",
             "세부 라이선스와 재배포 조건은 THIRD_PARTY_NOTICES.md 및 licenses 폴더를 확인하세요.",
             "",
         ]
