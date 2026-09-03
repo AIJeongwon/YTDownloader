@@ -328,9 +328,14 @@ def generated_source_assets(manifest: dict[str, object]) -> list[dict[str, str]]
 
 def validate_build_python(manifest: dict[str, object], python_version: str) -> None:
     """배포 자산과 빌드 Python의 패치 버전까지 일치하는지 확인합니다."""
-    expected = manifest.get("build_python_version")
-    if not isinstance(expected, str) or expected != python_version:
-        raise AssetError(f"배포 빌드는 Python {expected}에서만 허용됩니다. 현재 버전: {python_version}")
+    expected = manifest.get("build_python_versions")
+    if not isinstance(expected, list) or not expected or any(
+        not isinstance(value, str) or not value for value in expected
+    ):
+        raise AssetError("허용된 배포 Python 버전 목록이 올바르지 않습니다.")
+    if python_version not in expected:
+        versions = ", ".join(expected)
+        raise AssetError(f"허용된 배포 Python 버전은 {versions}입니다. 현재 버전: {python_version}")
 
 
 def prepare_runtime(manifest: dict[str, object], cache: Path, output: Path, python_version: str) -> None:

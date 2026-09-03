@@ -91,7 +91,7 @@ py -3 -m venv .venv
 .\deployment\build.ps1
 ```
 
-공식 배포 빌드는 Python 3.12.13으로 고정합니다. 빌드 스크립트는 버전을 고정한 공식 외부 자산을 내려받아 크기와 SHA-256을 검증하고 `dist\YTDownloader-Setup.exe`를 만듭니다. 릴리스 절차와 대응 소스 구성은 [배포 문서](docs/DISTRIBUTION.md)를 확인하세요.
+공식 GitHub 배포 빌드는 Python 3.13.15로 고정합니다. 로컬에서는 자산 목록에 등록한 Python 3.12.13도 검증용 빌드에 사용할 수 있습니다. 빌드 스크립트는 버전을 고정한 공식 외부 자산을 내려받아 크기와 SHA-256을 검증하고 `dist\YTDownloader-Setup.exe`를 만듭니다. 릴리스 절차와 대응 소스 구성은 [배포 문서](docs/DISTRIBUTION.md)를 확인하세요.
 
 ## 오픈 소스 및 라이선스
 
