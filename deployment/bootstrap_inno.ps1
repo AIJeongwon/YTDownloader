@@ -33,7 +33,8 @@ if (Test-Path -LiteralPath $compiler -PathType Leaf) {
 New-Item -ItemType Directory -Force -Path $bootstrapDirectory | Out-Null
 $installer = Join-Path $bootstrapDirectory "innosetup-6.7.3.exe"
 $expectedHash = "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732"
-$downloadUrl = "https://files.jrsoftware.org/is/6/innosetup-6.7.3.exe"
+# 공식 변경 불가능한 GitHub 릴리스 자산을 사용해 폐기되는 미러 주소에 의존하지 않습니다.
+$downloadUrl = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe"
 
 if (Test-Path -LiteralPath $installer -PathType Leaf) {
     $actualHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
