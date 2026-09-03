@@ -325,12 +325,49 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(36, 24, 36, 24)
         root.setSpacing(16)
 
+        header = QHBoxLayout()
+        header.setSpacing(20)
+        brand = QVBoxLayout()
+        brand.setContentsMargins(0, 0, 0, 0)
+        brand.setSpacing(6)
         title = QLabel("YTDownloader")
         title.setObjectName("title")
         subtitle = QLabel("원하는 영상만 간단하고 안전하게 저장하세요.")
         subtitle.setObjectName("subtitle")
-        root.addWidget(title)
-        root.addWidget(subtitle)
+        brand.addWidget(title)
+        brand.addWidget(subtitle)
+        brand.addStretch(1)
+        header.addLayout(brand)
+
+        self.video_info_card = QFrame()
+        self.video_info_card.setObjectName("videoInfoCard")
+        self.video_info_card.setFixedHeight(_THUMBNAIL_SIZE.height() + 22)
+        video_info_layout = QHBoxLayout(self.video_info_card)
+        video_info_layout.setContentsMargins(12, 10, 12, 10)
+        video_info_layout.setSpacing(14)
+        self.video_thumbnail = QLabel("미리보기")
+        self.video_thumbnail.setObjectName("videoThumbnail")
+        self.video_thumbnail.setFixedSize(_THUMBNAIL_SIZE)
+        self.video_thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.video_thumbnail.setAccessibleName("영상 썸네일")
+        video_info_layout.addWidget(self.video_thumbnail)
+        video_text_layout = QVBoxLayout()
+        video_text_layout.setContentsMargins(0, 0, 0, 0)
+        video_text_layout.setSpacing(4)
+        self.video_title = QLabel("주소를 입력하면 영상 정보를 확인합니다.")
+        self.video_title.setObjectName("videoTitle")
+        self.video_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.video_metadata = QLabel("제목 · 채널 · 길이")
+        self.video_metadata.setObjectName("muted")
+        self.video_info_status = QLabel("")
+        self.video_info_status.setObjectName("videoInfoStatus")
+        video_text_layout.addWidget(self.video_title)
+        video_text_layout.addWidget(self.video_metadata)
+        video_text_layout.addWidget(self.video_info_status)
+        video_text_layout.addStretch(1)
+        video_info_layout.addLayout(video_text_layout, 1)
+        header.addWidget(self.video_info_card, 1)
+        root.addLayout(header)
 
         form_card = QFrame()
         form_card.setObjectName("card")
@@ -358,40 +395,6 @@ class MainWindow(QMainWindow):
         url_layout.addWidget(self.url_edit, 1)
         url_layout.addWidget(self.video_info_button)
         form.addRow("YouTube 주소", url_row)
-
-        self.video_info_card = QFrame()
-        self.video_info_card.setObjectName("videoInfoCard")
-        video_info_layout = QHBoxLayout(self.video_info_card)
-        video_info_layout.setContentsMargins(12, 10, 12, 10)
-        video_info_layout.setSpacing(14)
-        self.video_thumbnail = QLabel("미리보기")
-        self.video_thumbnail.setObjectName("videoThumbnail")
-        self.video_thumbnail.setFixedSize(_THUMBNAIL_SIZE)
-        self.video_thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.video_thumbnail.setAccessibleName("영상 썸네일")
-        video_info_layout.addWidget(self.video_thumbnail)
-        video_text_layout = QVBoxLayout()
-        video_text_layout.setContentsMargins(0, 0, 0, 0)
-        video_text_layout.setSpacing(4)
-        self.video_title = QLabel("주소를 입력하면 영상 정보를 확인합니다.")
-        self.video_title.setObjectName("videoTitle")
-        self.video_title.setWordWrap(True)
-        self.video_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.video_metadata = QLabel("제목 · 채널 · 길이")
-        self.video_metadata.setObjectName("muted")
-        self.video_metadata.setWordWrap(True)
-        self.video_info_status = QLabel("")
-        self.video_info_status.setObjectName("videoInfoStatus")
-        self.video_info_status.setWordWrap(True)
-        video_text_layout.addWidget(self.video_title)
-        video_text_layout.addWidget(self.video_metadata)
-        video_text_layout.addWidget(self.video_info_status)
-        video_text_layout.addStretch(1)
-        video_info_layout.addLayout(video_text_layout, 1)
-        self.video_info_label = QLabel("영상 정보")
-        form.addRow(self.video_info_label, self.video_info_card)
-        self.video_info_label.hide()
-        self.video_info_card.hide()
 
         output_row = QWidget()
         output_layout = QHBoxLayout(output_row)
@@ -720,9 +723,10 @@ class MainWindow(QMainWindow):
         self.video_thumbnail.clear()
         self.video_thumbnail.setText("미리보기")
         self.video_title.setText("주소를 입력하면 영상 정보를 확인합니다.")
+        self.video_title.setToolTip("")
         self.video_metadata.setText("제목 · 채널 · 길이")
         self.video_info_status.clear()
-        self._set_video_info_visible(False)
+        self.video_info_status.setToolTip("")
 
     def _request_video_info(self, *, force: bool = False, for_download: bool = False) -> None:
         """현재 주소의 정보를 별도 yt-dlp 프로세스로 비동기 조회합니다."""
@@ -730,7 +734,6 @@ class MainWindow(QMainWindow):
             self._download_after_video_info = True
         if not self._tools_ready:
             self._download_after_video_info = False
-            self._set_video_info_visible(True)
             self.video_info_status.setText("yt-dlp 확인이 끝난 뒤 영상 정보를 확인할 수 있습니다.")
             return
         try:
@@ -742,7 +745,6 @@ class MainWindow(QMainWindow):
 
         if self._video_info_process is not None:
             self._video_info_refresh_requested = True
-            self._set_video_info_visible(True)
             self.video_info_status.setText("진행 중인 영상 정보 확인을 기다리고 있습니다…")
             return
         if (
@@ -765,10 +767,11 @@ class MainWindow(QMainWindow):
         self._video_info_query_url = normalized_url
         self._video_info_query_cookie = cookie_file
         self._video_info_timed_out = False
-        self._set_video_info_visible(True)
         self.video_title.setText("영상 정보를 확인하고 있습니다…")
+        self.video_title.setToolTip("")
         self.video_metadata.setText("잠시만 기다려 주세요.")
         self.video_info_status.clear()
+        self.video_info_status.setToolTip("")
         self.video_thumbnail.clear()
         self.video_thumbnail.setText("불러오는 중")
         self.video_info_button.setEnabled(False)
@@ -861,10 +864,11 @@ class MainWindow(QMainWindow):
         refresh_requested = self._video_info_refresh_requested
         self._download_after_video_info = False
         self._video_info_refresh_requested = False
-        self._set_video_info_visible(True)
         self.video_title.setText("영상 정보를 확인하지 못했습니다.")
+        self.video_title.setToolTip("")
         self.video_metadata.clear()
         self.video_info_status.setText(message)
+        self.video_info_status.setToolTip(message)
         self.video_thumbnail.clear()
         self.video_thumbnail.setText("미리보기\n없음")
         self.video_info_button.setEnabled(self._tools_ready and self._process is None)
@@ -880,19 +884,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "영상 정보 확인 필요", message)
 
     def _render_video_info(self, video_info: VideoInfo) -> None:
-        self._set_video_info_visible(True)
         self.video_title.setText(video_info.title)
+        self.video_title.setToolTip(video_info.title)
         self.video_metadata.setText(
             f"{video_info.channel}  ·  {format_duration(video_info.duration_seconds)}"
         )
         if video_info.duration_seconds is None:
-            self.video_info_status.setText("길이 정보가 없어 구간 범위 검사를 생략합니다.")
+            status = "길이 정보가 없어 구간 범위 검사를 생략합니다."
+            self.video_info_status.setText(status)
+            self.video_info_status.setToolTip(status)
         else:
             self.video_info_status.clear()
-
-    def _set_video_info_visible(self, visible: bool) -> None:
-        self.video_info_label.setVisible(visible)
-        self.video_info_card.setVisible(visible)
+            self.video_info_status.setToolTip("")
 
     def _load_video_thumbnail(self, video_info: VideoInfo) -> None:
         """고정된 YouTube 정적 이미지 주소에서 크기가 제한된 썸네일을 받습니다."""

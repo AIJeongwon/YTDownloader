@@ -172,7 +172,7 @@ class GuiSegmentTests(unittest.TestCase):
         self.assertLess(button_bottom, window.root_scroll.viewport().height())
         window.close()
 
-    def test_video_info_preview_appears_after_metadata_is_applied(self) -> None:
+    def test_video_info_preview_stays_visible_when_metadata_is_applied(self) -> None:
         window = MainWindow()
         info = VideoInfo(
             "https://youtu.be/abcdefghijk",
@@ -182,9 +182,8 @@ class GuiSegmentTests(unittest.TestCase):
             123,
             "not_live",
         )
-        self.assertTrue(window.video_info_card.isHidden())
-        with patch.object(window, "_load_video_thumbnail"):
-            window._render_video_info(info)
+        self.assertFalse(window.video_info_card.isHidden())
+        window._render_video_info(info)
         self.assertFalse(window.video_info_card.isHidden())
         self.assertEqual(window.video_title.text(), "미리보기 제목")
         self.assertIn("테스트 채널", window.video_metadata.text())
