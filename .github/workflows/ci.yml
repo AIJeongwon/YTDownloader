@@ -40,3 +40,7 @@ jobs:
       - name: 소스 구문 검사
         shell: pwsh
         run: python -m compileall -q src deployment tests
+
+      - name: 배포 셸 구문 검사
+        shell: bash
+        run: bash -n deployment/package_ffmpeg_sources.sh

@@ -26,11 +26,13 @@ if [[ "${#roots[@]}" -ne 1 ]]; then
     exit 1
 fi
 build_root="${roots[0]}"
+upstream_repository="yt-dlp/FFmpeg-Builds"
 
 (
     cd "$build_root"
-    ./generate.sh win64 gpl-shared
-    ./download.sh
+    # GitHub Actions의 현재 저장소명이 아니라 검증된 원본 저장소의 공개 빌드 이미지를 사용합니다.
+    GITHUB_REPOSITORY="$upstream_repository" ./generate.sh win64 gpl-shared
+    GITHUB_REPOSITORY="$upstream_repository" ./download.sh
 
     mapfile -t source_files < <(
         grep -oE '\.cache/downloads/[A-Za-z0-9._-]+\.tar\.xz' Dockerfile |
