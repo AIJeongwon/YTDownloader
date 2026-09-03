@@ -28,7 +28,7 @@ class DeploymentTest(unittest.TestCase):
         with redirect_stdout(output):
             result = main(["--version"])
         self.assertEqual(result, 0)
-        self.assertEqual(output.getvalue().strip(), "0.1.1")
+        self.assertEqual(output.getvalue().strip(), "0.1.2")
 
     def test_installation_check_starts_qt_without_updater(self) -> None:
         self.assertEqual(main(["--check-installation"]), 0)

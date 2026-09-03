@@ -44,7 +44,8 @@ jobs:
             build/source-assets/ffmpeg-builds-ea2ec3c0-source.tar.gz \
             build/ffmpeg-dependencies-ea2ec3c0-source.tar
           size=$(stat -c '%s' build/ffmpeg-dependencies-ea2ec3c0-source.tar)
-          if (( size > 1900000000 )); then
+          max_release_asset_size=$((2 * 1024 * 1024 * 1024))
+          if (( size >= max_release_asset_size )); then
             echo "생성된 대응 소스가 GitHub 자산 제한을 초과합니다: $size" >&2
             exit 1
           fi
