@@ -76,7 +76,7 @@ FFmpeg의 적용 라이선스는 빌드 옵션에 따라 달라집니다. 공식
 - 라이선스: [Python 라이선스와 연혁](https://docs.python.org/3/license.html)
 - 재배포 안내: [Python Software Foundation 라이선스 FAQ](https://wiki.python.org/moin/PythonSoftwareFoundationLicenseFaq)
 
-소스 저장소는 Python 인터프리터를 포함하지 않습니다. 공식 설치본은 Python 3.12.13과 PyInstaller로 Python 실행 환경을 묶으며 PSF 라이선스 전문을 설치 폴더에, 정확히 대응하는 Python 소스 아카이브를 같은 릴리스에 제공합니다.
+소스 저장소는 Python 인터프리터를 포함하지 않습니다. 공식 GitHub 설치본은 Python 3.13.15와 PyInstaller로 Python 실행 환경을 묶으며 PSF 라이선스 전문을 설치 폴더에, 정확히 대응하는 Python 소스 아카이브를 같은 릴리스에 제공합니다. 로컬 검증 빌드에는 자산 목록에 등록한 Python 3.12.13도 사용할 수 있습니다.
 
 ## PyInstaller
 

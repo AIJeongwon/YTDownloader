@@ -108,10 +108,14 @@ class DeploymentTest(unittest.TestCase):
             selected_source_assets(manifest, "3.12.13")
 
     def test_build_python_requires_exact_patch_version(self) -> None:
-        manifest = {"build_python_version": "3.12.13"}
+        manifest = {"build_python_versions": ["3.12.13", "3.13.15"]}
         validate_build_python(manifest, "3.12.13")
+        validate_build_python(manifest, "3.13.15")
         with self.assertRaises(AssetError):
             validate_build_python(manifest, "3.12.14")
+        for malformed in (None, [], ["3.13.15", 313], [""]):
+            with self.subTest(malformed=malformed), self.assertRaises(AssetError):
+                validate_build_python({"build_python_versions": malformed}, "3.13.15")
 
     def test_generated_source_assets_reject_paths(self) -> None:
         with self.assertRaises(AssetError):

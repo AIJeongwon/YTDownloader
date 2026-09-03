@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "build_python_version": "3.12.13",
+  "build_python_versions": ["3.12.13", "3.13.15"],
   "runtime_assets": [
     {
       "id": "yt-dlp",
@@ -133,6 +133,13 @@
       "size": 13936,
       "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
       "python_version": "3.12.13"
+    },
+    {
+      "filename": "Python-3.13.15-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/LICENSE",
+      "size": 13809,
+      "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+      "python_version": "3.13.15"
     }
   ],
   "generated_source_assets": [
@@ -199,6 +206,15 @@
       "size": 20801708,
       "sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684",
       "python_version": "3.12.13"
+    },
+    {
+      "id": "python-source-3.13.15",
+      "title": "Python 3.13.15 소스",
+      "filename": "Python-3.13.15.tar.xz",
+      "url": "https://www.python.org/ftp/python/3.13.15/Python-3.13.15.tar.xz",
+      "size": 23160540,
+      "sha256": "1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76",
+      "python_version": "3.13.15"
     }
   ]
 }

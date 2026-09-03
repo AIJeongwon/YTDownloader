@@ -22,7 +22,7 @@ PowerShell에서 다음 명령을 실행합니다.
 .\deployment\build.ps1
 ```
 
-공식 배포 빌드는 Python 3.12.13을 사용하며, 다른 패치 버전은 자산 준비 단계에서 거부합니다. 빌드는 테스트 통과 후에만 계속됩니다. `deployment/assets.json`의 HTTPS 주소, 파일 크기와 SHA-256이 모두 일치해야 외부 자산을 사용합니다. Inno Setup도 고정 버전과 SHA-256으로 준비합니다. PyInstaller가 `PATH`에서 잘못 수집할 수 있는 OpenSSL과 libffi DLL은 현재 Python 배포본의 원본으로 교체한 뒤 해시를 재검증합니다.
+공식 GitHub 배포 빌드는 Python 3.13.15를 사용합니다. 로컬 검증 빌드는 자산 목록에 등록된 Python 3.12.13도 허용하며, 그 밖의 패치 버전은 자산 준비 단계에서 거부합니다. 빌드는 테스트 통과 후에만 계속됩니다. `deployment/assets.json`의 HTTPS 주소, 파일 크기와 SHA-256이 모두 일치해야 외부 자산을 사용합니다. Inno Setup도 고정 버전과 SHA-256으로 준비합니다. PyInstaller가 `PATH`에서 잘못 수집할 수 있는 OpenSSL과 libffi DLL은 현재 Python 배포본의 원본으로 교체한 뒤 해시를 재검증합니다.
 
 결과 파일은 다음과 같습니다.
 
