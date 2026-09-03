@@ -19,13 +19,23 @@ from PySide6.QtCore import (
     QThread,
     QTimer,
     Qt,
+    QUrl,
     Signal,
     Slot,
 )
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont, QWheelEvent
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDesktopServices,
+    QDragEnterEvent,
+    QDragLeaveEvent,
+    QDropEvent,
+    QFont,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -49,6 +59,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
+from .app_updates import AppRelease, AppUpdateCheckResult, check_for_app_update
 from .commands import DONE_PREFIX, build_download_arguments, parse_progress_line
 from .job_files import (
     JOB_FILE_EXTENSION,
@@ -209,6 +221,35 @@ class _UpdateWorker(QObject):
         self.completed.emit(result)
 
 
+class _AppUpdateWorker(QObject):
+    """GitHub의 최신 앱 릴리스를 전용 스레드에서 확인합니다."""
+
+    completed = Signal(object)
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            result = AppUpdateCheckResult(check_for_app_update(__version__))
+        except Exception as error:
+            result = AppUpdateCheckResult(None, f"{type(error).__name__}: {error}")
+        self.completed.emit(result)
+
+
+class _AppUpdateDialog(QMessageBox):
+    """새 앱 버전과 버전별 알림 제외 선택지를 표시합니다."""
+
+    def __init__(self, release: AppRelease, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setIcon(QMessageBox.Icon.Information)
+        self.setWindowTitle("YTDownloader 업데이트")
+        self.setText(f"새 버전 {release.version}이 있습니다.")
+        self.setInformativeText("GitHub 릴리스 페이지에서 새 설치 파일을 받을 수 있습니다.")
+        self.suppress_checkbox = QCheckBox("이 버전의 업데이트 알림을 다시 표시하지 않기")
+        self.setCheckBox(self.suppress_checkbox)
+        self.download_button = self.addButton("다운로드 페이지 열기", QMessageBox.ButtonRole.AcceptRole)
+        self.addButton("나중에", QMessageBox.ButtonRole.RejectRole)
+
+
 class MainWindow(QMainWindow):
     """전체 영상 또는 여러 구간 다운로드를 관리하는 메인 창입니다."""
 
@@ -225,6 +266,8 @@ class MainWindow(QMainWindow):
         self._total_jobs = 0
         self._update_thread: QThread | None = None
         self._update_worker: _UpdateWorker | None = None
+        self._app_update_thread: QThread | None = None
+        self._app_update_worker: _AppUpdateWorker | None = None
         self._close_after_update = False
 
         self.setWindowTitle("YTDownloader")
@@ -746,6 +789,58 @@ class MainWindow(QMainWindow):
             thread.deleteLater()
         if self._close_after_update:
             QApplication.quit()
+        else:
+            self._start_app_update_check()
+
+    def _start_app_update_check(self) -> None:
+        self._append_log("YTDownloader의 새 정식 버전을 확인합니다.")
+        thread = QThread(self)
+        worker = _AppUpdateWorker()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.completed.connect(self._finish_app_update_check)
+        worker.completed.connect(thread.quit)
+        worker.completed.connect(worker.deleteLater)
+        thread.finished.connect(self._release_app_update_thread)
+        self._app_update_thread = thread
+        self._app_update_worker = worker
+        thread.start()
+
+    @Slot(object)
+    def _finish_app_update_check(self, result: AppUpdateCheckResult) -> None:
+        if self._close_after_update:
+            return
+        if result.error is not None:
+            self._append_log(f"앱 업데이트 확인을 건너뜁니다: {result.error}")
+            return
+        if result.release is None:
+            self._append_log(f"YTDownloader {__version__} 최신 상태입니다.")
+            return
+        ignored_version = self._settings.value("ignoredAppUpdateVersion", "", str)
+        if ignored_version == result.release.version:
+            self._append_log(f"사용자가 제외한 앱 버전 {result.release.version}의 알림을 표시하지 않습니다.")
+            return
+        self._show_app_update(result.release)
+
+    def _show_app_update(self, release: AppRelease) -> None:
+        dialog = _AppUpdateDialog(release, self)
+        dialog.exec()
+        if dialog.suppress_checkbox.isChecked():
+            self._settings.setValue("ignoredAppUpdateVersion", release.version)
+            self._settings.sync()
+        if dialog.clickedButton() is dialog.download_button:
+            if not QDesktopServices.openUrl(QUrl(release.page_url)):
+                QMessageBox.warning(self, "페이지 열기 실패", "기본 브라우저에서 GitHub 릴리스 페이지를 열지 못했습니다.")
+
+    @Slot()
+    def _release_app_update_thread(self) -> None:
+        thread = self._app_update_thread
+        self._app_update_thread = None
+        self._app_update_worker = None
+        if thread is not None:
+            thread.deleteLater()
+        if self._close_after_update:
+            QApplication.quit()
 
     @Slot()
     def _start_download(self) -> None:
@@ -997,7 +1092,13 @@ class MainWindow(QMainWindow):
             if not process.waitForFinished(3000):
                 process.kill()
                 process.waitForFinished(1000)
-        if self._update_thread is not None and self._update_thread.isRunning():
+        background_check_running = (
+            self._update_thread is not None
+            and self._update_thread.isRunning()
+            or self._app_update_thread is not None
+            and self._app_update_thread.isRunning()
+        )
+        if background_check_running:
             self._close_after_update = True
             self.hide()
             event.ignore()
